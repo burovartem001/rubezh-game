@@ -119,6 +119,7 @@ export const ACTIONS: Record<string, Handler> = {
   async train(c, ps, a, now) {
     const type = oneOf(a.type, OPERATOR_TYPES, 'тип оператора');
     const count = int(a.count ?? 1, 1, MAX_TRAIN_BATCH, 'количество');
+    if (OPERATORS[type].award) throw new GameError(`${OPERATORS[type].name} не обучается — приходит только за особые заслуги`);
     if (!operatorUnlocked(type, ps.buildings.training, ps.buildings.hq)) {
       const u = OPERATORS[type].unlock;
       throw new GameError(`Специализация закрыта: нужен центр подготовки ${u.training} ур.${u.hq ? ` и командный пункт ${u.hq} ур.` : ''}`);
@@ -138,7 +139,8 @@ export const ACTIONS: Record<string, Handler> = {
     if (o.rank >= MAX_RANK) throw new GameError('Максимальный ранг');
     const to = o.rank + 1;
     if (ps.buildings.training < rankRequiredTraining(to)) throw new GameError(`Для ранга ${to} нужен центр подготовки ${rankRequiredTraining(to)} уровня`);
-    if (!operatorUnlocked(type, ps.buildings.training, ps.buildings.hq)) throw new GameError('Специализация ещё закрыта');
+    const owned = o.available + o.on_mission + o.wounded + o.recovering > 0;
+    if (OPERATORS[type].award ? !owned : !operatorUnlocked(type, ps.buildings.training, ps.buildings.hq)) throw new GameError('Специализация ещё закрыта');
     if (ps.jobs.filter((j) => j.queue === 'train').length >= TRAIN_QUEUE_LIMIT) throw new GameError('Очередь подготовки заполнена');
     const cost = rankUpgradeCost(type, to);
     spend(ps, cost);
@@ -163,6 +165,7 @@ export const ACTIONS: Record<string, Handler> = {
   async acquireVehicle(c, ps, a, now) {
     const type = oneOf(a.type, VEHICLE_TYPES, 'транспорт');
     const d = VEHICLES[type];
+    if (d.award) throw new GameError(`${d.name} выдаётся только за особые заслуги`);
     if (ps.vehicles[type]) throw new GameError('Этот транспорт уже есть');
     if (ps.jobs.some((j) => j.kind === 'vehicle_acquire' && j.payload.type === type)) throw new GameError('Уже готовится в мастерской');
     if (ps.buildings.hq < d.unlockHq) throw new GameError(`Нужен командный пункт ${d.unlockHq} уровня`);
@@ -228,6 +231,7 @@ export const ACTIONS: Record<string, Handler> = {
     const e = ps.equipment.find((x) => x.id === id);
     if (!e) throw new GameError('Предмет не найден');
     if (e.status !== 'ready') throw new GameError('Предмет сейчас в походе');
+    if (e.rarity === 'award') throw new GameError('Наградные предметы не разбирают');
     const back = Math.round((CRAFT[e.rarity].cost.parts ?? 0) * 0.5);
     await c.query('DELETE FROM equipment WHERE id=$1 AND user_id=$2', [id, ps.userId]);
     ps.equipment = ps.equipment.filter((x) => x.id !== id);
@@ -265,7 +269,7 @@ export const ACTIONS: Record<string, Handler> = {
       if (e.status !== 'ready') throw new GameError(`${EQUIPMENT[e.type].name} уже в походе`);
       return e;
     });
-    if (new Set(eq.map((e) => e.type)).size !== eq.length) throw new GameError('Нельзя взять два предмета одного типа');
+    if (new Set(eq.map((e) => EQUIPMENT[e.type].kind)).size !== eq.length) throw new GameError('Нельзя взять два предмета с одинаковым эффектом');
 
     const ranks = Object.fromEntries(OPERATOR_TYPES.map((t) => [t, ps.ops[t].rank])) as Record<OperatorType, number>;
     const input = {

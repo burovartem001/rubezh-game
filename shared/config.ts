@@ -134,7 +134,7 @@ export function buildingEffectText(key: BuildingKey, level: number): string {
 }
 
 function rarityNamesFor(workshopLevel: number): string {
-  return (Object.keys(WORKSHOP_RARITY_LEVEL) as Rarity[])
+  return (Object.keys(WORKSHOP_RARITY_LEVEL) as CraftRarity[])
     .filter((r) => workshopLevel >= WORKSHOP_RARITY_LEVEL[r])
     .map((r) => RARITY_NAMES[r].toLowerCase())
     .join(', ');
@@ -142,8 +142,10 @@ function rarityNamesFor(workshopLevel: number): string {
 
 /* ───────────────────────────── Операторы ───────────────────────────── */
 
-export type OperatorType = 'scout' | 'fpv' | 'heavy' | 'babayaga';
-export const OPERATOR_TYPES: OperatorType[] = ['scout', 'fpv', 'heavy', 'babayaga'];
+export type OperatorType = 'scout' | 'fpv' | 'heavy' | 'babayaga' | 'veteran';
+export const OPERATOR_TYPES: OperatorType[] = ['scout', 'fpv', 'heavy', 'babayaga', 'veteran'];
+/** Обучаемые классы (наградные выдаются только за заслуги). */
+export const TRAINABLE_OPERATORS: OperatorType[] = ['scout', 'fpv', 'heavy', 'babayaga'];
 
 export interface OperatorDef {
   name: string;
@@ -158,6 +160,7 @@ export interface OperatorDef {
   upkeep: number; // припасы на поход
   unlock: { training: number; hq?: number };
   sprite: number; // номер панели на иллюстрации
+  award?: boolean; // только награда за заслуги на сайте «Учёт дронов»
 }
 
 export const OPERATORS: Record<OperatorType, OperatorDef> = {
@@ -217,23 +220,41 @@ export const OPERATORS: Record<OperatorType, OperatorDef> = {
     unlock: { training: 5, hq: 5 },
     sprite: 3,
   },
+  veteran: {
+    name: 'Бывший штурмовик',
+    role: 'Наградной боец',
+    strong: 'Сильнее оператора FPV, сам реже попадает в потери и снижает потери группы',
+    weak: 'Не обучается — выдаётся только за особые заслуги',
+    cost: {},
+    time: 0,
+    power: 7,
+    recon: 1.5,
+    exposure: 0.55,
+    upkeep: 5,
+    unlock: { training: 99 },
+    sprite: 2,
+    award: true,
+  },
 };
 
 /** Тяжёлый БПЛА: +5% к силе группы за оператора в сложных заданиях (опорный пункт или сложность ≥ 3), до +25%. */
 export const HEAVY_HARD_BONUS = { perUnit: 0.05, max: 0.25, minDifficulty: 3 };
 /** «Баба-яга»: +6% за оператора в длительных походах (≥ 5 мин) и особых целях (опорный пункт, событийная зона), до +30%. */
 export const BABAYAGA_BONUS = { perUnit: 0.06, max: 0.3, longSeconds: 300 };
+/** «Бывший штурмовик»: −4% к потерям всей группы за бойца, до −16%. */
+export const VETERAN_BONUS = { perUnit: 0.04, max: 0.16 };
 
 export const MAX_TRAIN_BATCH = 10;
 export const TRAIN_QUEUE_LIMIT = 5;
 export const WORKSHOP_QUEUE_LIMIT = 3;
 
 export function operatorUnlocked(type: OperatorType, trainingLevel: number, hqLevel: number): boolean {
+  if (OPERATORS[type].award) return false;
   const u = OPERATORS[type].unlock;
   return trainingLevel >= u.training && hqLevel >= (u.hq ?? 1);
 }
 function unlockedOperatorNames(trainingLevel: number): string[] {
-  return OPERATOR_TYPES.filter((t) => trainingLevel >= OPERATORS[t].unlock.training).map((t) => OPERATORS[t].name);
+  return TRAINABLE_OPERATORS.filter((t) => trainingLevel >= OPERATORS[t].unlock.training).map((t) => OPERATORS[t].name);
 }
 export function trainTime(type: OperatorType, trainingLevel: number): number {
   const k = 1 - Math.min(0.5, (trainingLevel - 1) * TRAINING_SPEED_PER_LEVEL);
@@ -245,7 +266,7 @@ export const MAX_RANK = 5;
 export const RANK_BONUS = 0.1;
 export function rankUpgradeCost(type: OperatorType, toRank: number): Cost {
   const k = Math.pow(1.8, toRank - 2);
-  const base = OPERATORS[type].cost;
+  const base = OPERATORS[type].award ? { supplies: 80 } : OPERATORS[type].cost;
   return {
     supplies: Math.round((base.supplies ?? 0) * 1.5 * k),
     parts: Math.round(60 * k),
@@ -264,7 +285,7 @@ export function rankRequiredTraining(toRank: number): number {
 /** Восстановление раненых: половина припасов обучения на оператора. */
 export function recoveryCost(counts: Partial<Record<OperatorType, number>>, logisticsRank: number): Cost {
   let s = 0;
-  for (const t of OPERATOR_TYPES) s += (counts[t] ?? 0) * Math.ceil((OPERATORS[t].cost.supplies ?? 0) * 0.5);
+  for (const t of OPERATOR_TYPES) s += (counts[t] ?? 0) * Math.ceil((OPERATORS[t].award ? 80 : OPERATORS[t].cost.supplies ?? 0) * 0.5);
   return { supplies: Math.round(s * (1 - SKILL_EFFECTS.medic * logisticsRank)) };
 }
 export function recoveryTime(total: number, logisticsRank: number): number {
@@ -273,8 +294,9 @@ export function recoveryTime(total: number, logisticsRank: number): number {
 
 /* ───────────────────────────── Транспорт ───────────────────────────── */
 
-export type VehicleType = 'moto' | 'ebike' | 'bukhanka';
-export const VEHICLE_TYPES: VehicleType[] = ['moto', 'ebike', 'bukhanka'];
+export type VehicleType = 'moto' | 'ebike' | 'bukhanka' | 'gyro' | 'niva';
+export const VEHICLE_TYPES: VehicleType[] = ['moto', 'ebike', 'bukhanka', 'gyro', 'niva'];
+export const STANDARD_VEHICLES: VehicleType[] = ['moto', 'ebike', 'bukhanka'];
 export const MAX_VEHICLE_LEVEL = 5;
 
 export interface VehicleDef {
@@ -284,7 +306,8 @@ export interface VehicleDef {
   acquireCost: Cost;
   acquireTime: number;
   fuelMul: number; // базовый коэффициент расхода топлива
-  sprite: number;
+  sprite: number; // −1 — своя векторная иллюстрация
+  award?: boolean;
 }
 
 export const VEHICLES: Record<VehicleType, VehicleDef> = {
@@ -315,6 +338,26 @@ export const VEHICLES: Record<VehicleType, VehicleDef> = {
     fuelMul: 1.5,
     sprite: 2,
   },
+  gyro: {
+    name: 'Гироскутер',
+    purpose: 'Наградной: бесшумный, почти не ест топливо, в разведке лучше электровелосипеда',
+    unlockHq: 99,
+    acquireCost: {},
+    acquireTime: 0,
+    fuelMul: 1,
+    sprite: -1,
+    award: true,
+  },
+  niva: {
+    name: 'Золотая Нива',
+    purpose: 'Наградная: вместительнее, быстрее и экономнее «Буханки», больше добычи',
+    unlockHq: 99,
+    acquireCost: {},
+    acquireTime: 0,
+    fuelMul: 1.3,
+    sprite: -1,
+    award: true,
+  },
 };
 
 export interface VehicleBonus {
@@ -333,6 +376,10 @@ export function vehicleBonus(type: VehicleType, level: number): VehicleBonus {
       return { timeMul: 1, fuelMul: 1 - (0.5 + 0.05 * l), capacity: 0, lootBonus: 0, reconBonus: 0.1 + 0.02 * l };
     case 'bukhanka':
       return { timeMul: 1.1, fuelMul: 1.5, capacity: 2 + (level >= 3 ? 1 : 0) + (level >= 5 ? 1 : 0), lootBonus: 0.1 + 0.04 * l, reconBonus: 0 };
+    case 'gyro':
+      return { timeMul: 0.9, fuelMul: 1 - (0.6 + 0.05 * l), capacity: 0, lootBonus: 0, reconBonus: 0.14 + 0.02 * l };
+    case 'niva':
+      return { timeMul: 1, fuelMul: 1.3, capacity: 3 + (level >= 3 ? 1 : 0) + (level >= 5 ? 1 : 0), lootBonus: 0.15 + 0.04 * l, reconBonus: 0 };
   }
 }
 export function vehicleBonusText(type: VehicleType, level: number): string {
@@ -365,53 +412,108 @@ export const VEHICLE_REPAIR_TIME = 40;
 
 /* ───────────────────────────── Оснащение ───────────────────────────── */
 
-export type EquipmentType = 'nsu' | 'reb' | 'commkit' | 'repairkit';
+export type EquipmentType = 'nsu' | 'reb' | 'commkit' | 'repairkit' | 'rebNew' | 'nsuRubicon' | 'pigGear' | 'fpvBoevye' | 'mavicField';
+/** Предметы, которые собирают в мастерской и находят в походах. */
 export const EQUIPMENT_TYPES: EquipmentType[] = ['nsu', 'reb', 'commkit', 'repairkit'];
-export type Rarity = 'common' | 'improved' | 'rare';
-export const RARITIES: Rarity[] = ['common', 'improved', 'rare'];
-export const RARITY_NAMES: Record<Rarity, string> = { common: 'Обычный', improved: 'Улучшенный', rare: 'Редкий' };
+/** Наградные предметы: выдаются за особые заслуги на сайте «Учёт дронов». */
+export const AWARD_EQUIPMENT: EquipmentType[] = ['rebNew', 'nsuRubicon', 'pigGear', 'fpvBoevye', 'mavicField'];
+export const ALL_EQUIPMENT_TYPES: EquipmentType[] = [...EQUIPMENT_TYPES, ...AWARD_EQUIPMENT];
+export type Rarity = 'common' | 'improved' | 'rare' | 'award';
+export type CraftRarity = 'common' | 'improved' | 'rare';
+export const RARITIES: CraftRarity[] = ['common', 'improved', 'rare'];
+export const RARITY_NAMES: Record<Rarity, string> = { common: 'Обычный', improved: 'Улучшенный', rare: 'Редкий', award: 'Наградной' };
 export const MAX_EQUIPMENT_LEVEL = 5;
 export const EQUIPMENT_LIMIT = 20;
 export const MAX_EQUIPMENT_PER_GROUP = 2;
 
+/** Вид эффекта: два предмета с одинаковым видом эффекта в одну группу не берутся. */
+export type EquipKind = 'fpv' | 'losses' | 'recon' | 'field' | 'power';
+export const EQUIP_KIND_NAMES: Record<EquipKind, string> = { fpv: 'усиление FPV', losses: 'защита от потерь', recon: 'разведка', field: 'полевой ремонт', power: 'ударная сила' };
 export interface EquipmentDef {
   name: string;
   icon: string;
-  effect: string;
-  base: Record<Rarity, number>; // доля, на уровне 1
+  kind: EquipKind;
+  base: Partial<Record<Rarity, number>>; // доля на уровне 1
+  extra?: { kind: EquipKind; value: number }; // второй, небольшой эффект
+  award?: boolean;
 }
 export const EQUIPMENT: Record<EquipmentType, EquipmentDef> = {
-  nsu: { name: 'НСУ для FPV', icon: '▣', effect: 'к вкладу операторов FPV', base: { common: 0.12, improved: 0.18, rare: 0.25 } },
-  reb: { name: 'Комплекс РЭБ', icon: '◉', effect: 'к расчётным потерям группы', base: { common: 0.1, improved: 0.15, rare: 0.22 } },
-  commkit: { name: 'Комплект связи', icon: '⌁', effect: 'к разведке и данным, точнее прогноз', base: { common: 0.1, improved: 0.15, rare: 0.22 } },
-  repairkit: { name: 'Полевой ремкомплект', icon: '✚', effect: 'раненых восстанавливается в поле, ниже риск поломки', base: { common: 0.3, improved: 0.45, rare: 0.6 } },
+  nsu: { name: 'НСУ для FPV', icon: '▣', kind: 'fpv', base: { common: 0.12, improved: 0.18, rare: 0.25 } },
+  reb: { name: 'Комплекс РЭБ', icon: '◉', kind: 'losses', base: { common: 0.1, improved: 0.15, rare: 0.22 } },
+  commkit: { name: 'Комплект связи', icon: '⌁', kind: 'recon', base: { common: 0.1, improved: 0.15, rare: 0.22 } },
+  repairkit: { name: 'Полевой ремкомплект', icon: '✚', kind: 'field', base: { common: 0.3, improved: 0.45, rare: 0.6 } },
+  // наградные: чуть сильнее «улучшенных» стандартных
+  rebNew: { name: 'РЭБ нового образца', icon: '◉', kind: 'losses', base: { award: 0.18 }, award: true },
+  nsuRubicon: { name: 'НСУ, брошенное Рубиконом', icon: '▣', kind: 'fpv', base: { award: 0.21 }, award: true },
+  pigGear: { name: 'Снятое со свиньи снаряжение', icon: '✚', kind: 'losses', base: { award: 0.12 }, extra: { kind: 'power', value: 0.04 }, award: true },
+  fpvBoevye: { name: 'FPV-дрон, купленный на боевые', icon: '▣', kind: 'power', base: { award: 0.08 }, award: true },
+  mavicField: { name: 'Дрон Mavic, найденный в поле', icon: '⌁', kind: 'recon', base: { award: 0.18 }, award: true },
 };
+const KIND_CAP: Record<EquipKind, number> = { fpv: 0.6, losses: 0.6, recon: 0.6, field: 0.85, power: 0.3 };
 export function equipmentPower(type: EquipmentType, rarity: Rarity, level: number): number {
-  const v = EQUIPMENT[type].base[rarity] * (1 + 0.1 * (level - 1));
-  return Math.min(type === 'repairkit' ? 0.85 : 0.6, v);
+  const d = EQUIPMENT[type];
+  const base = d.base[rarity] ?? d.base.award ?? Object.values(d.base)[0] ?? 0;
+  return Math.min(KIND_CAP[d.kind], base * (1 + 0.1 * (level - 1)));
 }
-export function equipmentEffectText(type: EquipmentType, rarity: Rarity, level: number): string {
-  const p = Math.round(equipmentPower(type, rarity, level) * 100);
-  switch (type) {
-    case 'nsu':
+/** Суммарный эффект заданного вида по набору предметов. */
+export function equipmentKindValue(items: { type: EquipmentType; rarity: Rarity; level: number }[], kind: EquipKind): number {
+  let v = 0;
+  for (const e of items) {
+    const d = EQUIPMENT[e.type];
+    if (d.kind === kind) v += equipmentPower(e.type, e.rarity, e.level);
+    if (d.extra?.kind === kind) v += d.extra.value * (1 + 0.1 * (e.level - 1));
+  }
+  return Math.min(KIND_CAP[kind], v);
+}
+function kindText(kind: EquipKind, p: number): string {
+  switch (kind) {
+    case 'fpv':
       return `+${p}% к вкладу операторов FPV`;
-    case 'reb':
+    case 'losses':
       return `−${p}% к расчётным потерям группы`;
-    case 'commkit':
+    case 'recon':
       return `+${p}% к разведке и данным, прогноз точнее на ${p * 2}%`;
-    case 'repairkit':
+    case 'field':
       return `${p}% раненых восстанавливается в поле, риск поломки транспорта −${p}%`;
+    case 'power':
+      return `+${p}% к силе всей группы`;
   }
 }
-export const CRAFT: Record<Rarity, { cost: Cost; time: number }> = {
+export function equipmentEffectText(type: EquipmentType, rarity: Rarity, level: number): string {
+  const d = EQUIPMENT[type];
+  const main = kindText(d.kind, Math.round(equipmentPower(type, rarity, level) * 100));
+  return d.extra ? `${main}; ${kindText(d.extra.kind, Math.round(d.extra.value * (1 + 0.1 * (level - 1)) * 100))}` : main;
+}
+export const CRAFT: Record<CraftRarity, { cost: Cost; time: number }> = {
   common: { cost: { supplies: 40, parts: 80 }, time: 30 },
   improved: { cost: { supplies: 80, parts: 200, data: 20 }, time: 90 },
   rare: { cost: { supplies: 150, parts: 450, data: 60 }, time: 240 },
 };
 export function equipmentUpgradeCost(rarity: Rarity, level: number): Cost {
-  const r = { common: 1, improved: 1.6, rare: 2.4 }[rarity];
+  const r = { common: 1, improved: 1.6, rare: 2.4, award: 2 }[rarity];
   return { parts: Math.round(60 * r * Math.pow(1.7, level - 1)), data: Math.round(5 * r * level) };
 }
+
+/* ───────────────────────────── Награды за заслуги ───────────────────────────── */
+
+/** Каталог наград, которые выдаёт сайт «Учёт дронов». Ключ награды передаётся в API выдачи. */
+export type AwardKey = 'veteran' | 'gyro' | 'niva' | 'rebNew' | 'nsuRubicon' | 'pigGear' | 'fpvBoevye' | 'mavicField';
+export interface AwardDef {
+  kind: 'operator' | 'vehicle' | 'equipment';
+  name: string;
+}
+export const AWARDS: Record<AwardKey, AwardDef> = {
+  veteran: { kind: 'operator', name: 'Бывший штурмовик' },
+  gyro: { kind: 'vehicle', name: 'Гироскутер' },
+  niva: { kind: 'vehicle', name: 'Золотая Нива' },
+  rebNew: { kind: 'equipment', name: 'РЭБ нового образца' },
+  nsuRubicon: { kind: 'equipment', name: 'НСУ, брошенное Рубиконом' },
+  pigGear: { kind: 'equipment', name: 'Снятое со свиньи снаряжение' },
+  fpvBoevye: { kind: 'equipment', name: 'FPV-дрон, купленный на боевые' },
+  mavicField: { kind: 'equipment', name: 'Дрон Mavic, найденный в поле' },
+};
+export const AWARD_KEYS = Object.keys(AWARDS) as AwardKey[];
+export const AWARD_SOURCE_NAME = 'сайт «Учёт дронов»';
 
 /* ───────────────────────────── Командир ───────────────────────────── */
 
@@ -648,4 +750,4 @@ export function gameDay(ms: number): string {
   return new Date(ms + 3 * 3600_000).toISOString().slice(0, 10);
 }
 
-export const START_OPERATORS: Record<OperatorType, number> = { scout: 2, fpv: 0, heavy: 0, babayaga: 0 };
+export const START_OPERATORS: Record<OperatorType, number> = { scout: 2, fpv: 0, heavy: 0, babayaga: 0, veteran: 0 };

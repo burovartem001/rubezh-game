@@ -55,3 +55,24 @@ test('хранилище вмещает цену следующего улучш
       assert.ok((c.supplies ?? 0) <= storageCap(l), `${k} ${l}`);
     }
 });
+
+test('наградное чуть сильнее стандартного', () => {
+  const p = (over: Partial<PlanInput>) => planExpedition(base(over));
+  const imp = (type: 'nsu' | 'reb' | 'commkit') => [{ type, rarity: 'improved' as const, level: 1 }];
+  const aw = (type: 'nsuRubicon' | 'rebNew' | 'mavicField' | 'pigGear' | 'fpvBoevye') => [{ type, rarity: 'award' as const, level: 1 }];
+  assert.ok(p({ equipment: aw('nsuRubicon') }).power > p({ equipment: imp('nsu') }).power, 'НСУ Рубикона');
+  assert.ok(p({ equipment: aw('rebNew') }).lossMul < p({ equipment: imp('reb') }).lossMul, 'РЭБ нового образца');
+  assert.ok(p({ mission: 'recon', equipment: aw('mavicField') }).reconScore > p({ mission: 'recon', equipment: imp('commkit') }).reconScore, 'Mavic');
+  const pig = p({ equipment: aw('pigGear') });
+  assert.ok(pig.lossMul < p({}).lossMul && pig.power > p({}).power, 'снаряжение со свиньи');
+  assert.ok(p({ equipment: aw('fpvBoevye') }).power > p({}).power, 'FPV на боевые');
+  const niva = p({ vehicle: { type: 'niva', level: 1 } });
+  const bukh = p({ vehicle: { type: 'bukhanka', level: 1 } });
+  assert.ok(niva.capacity > bukh.capacity && niva.cost.fuel! <= bukh.cost.fuel! && niva.duration < bukh.duration && niva.rewardMul > bukh.rewardMul, 'Нива лучше Буханки');
+  const gyro = p({ mission: 'recon', vehicle: { type: 'gyro', level: 1 } });
+  const ebike = p({ mission: 'recon', vehicle: { type: 'ebike', level: 1 } });
+  assert.ok(gyro.cost.fuel! <= ebike.cost.fuel! && gyro.reconScore > ebike.reconScore, 'гироскутер');
+  const vet = p({ group: { veteran: 1, scout: 2 } });
+  const fpv = p({ group: { fpv: 1, scout: 2 } });
+  assert.ok(vet.power > fpv.power && vet.lossMul < fpv.lossMul, 'бывший штурмовик');
+});

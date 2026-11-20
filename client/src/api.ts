@@ -1,4 +1,4 @@
-import type { Cost, MissionType, Outcome, OperatorType, VehicleType, EquipmentType, Rarity, DailyKey, BuildingKey, Skills } from '../../shared/config';
+import type { Cost, MissionType, Outcome, OperatorType, VehicleType, EquipmentType, Rarity, DailyKey, BuildingKey, Skills, AwardKey } from '../../shared/config';
 import type { Casualties, Reason } from '../../shared/calc';
 
 /* Типы состояния, приходящего с сервера (server/src/game/state.ts → view) */
@@ -37,6 +37,8 @@ export interface GameState {
   tutorialStep: number;
   daily: { day: string; counters: Partial<Record<DailyKey, number>>; claimed: Partial<Record<DailyKey, boolean>> };
   notices: { kind: 'info' | 'success' | 'warn'; text: string }[];
+  awards: { id: number; award: AwardKey; count: number; reason: string; at: number }[];
+  newAwards: { award: AwardKey; count: number; reason: string }[];
   reports: Report[];
   unreadReports: number;
 }

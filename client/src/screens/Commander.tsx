@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import {
+  AWARDS, AWARD_KEYS, AWARD_SOURCE_NAME, AwardKey, OPERATORS, OperatorType, VEHICLES, VehicleType, equipmentEffectText,
   BRANCH_NAMES, Branch, COMMANDER_MAX_LEVEL, INSIGNIA, PORTRAITS, RESPEC_COST_DATA, SKILLS, SKILL_KEYS, XP_THRESHOLDS, branchPoints, spentPoints,
 } from '../../../shared/config';
 import { COMMANDER_TITLES } from '../../../shared/lore';
@@ -142,6 +143,8 @@ export function CommanderScreen() {
         </div>
       </section>
 
+      <AwardsShowcase />
+
       <section className="panel">
         <h2>
           <Icon name="back" size={20} /> Сброс навыков
@@ -164,6 +167,70 @@ export function CommanderScreen() {
         <Icon name="logout" size={18} /> Выйти из аккаунта
       </button>
     </>
+  );
+}
+
+const AWARD_TEXT: Record<AwardKey, string> = {
+  veteran: OPERATORS.veteran.strong,
+  gyro: VEHICLES.gyro.purpose.replace(/^Наградной: /, ''),
+  niva: VEHICLES.niva.purpose.replace(/^Наградная: /, ''),
+  rebNew: equipmentEffectText('rebNew', 'award', 1),
+  nsuRubicon: equipmentEffectText('nsuRubicon', 'award', 1),
+  pigGear: equipmentEffectText('pigGear', 'award', 1),
+  fpvBoevye: equipmentEffectText('fpvBoevye', 'award', 1),
+  mavicField: equipmentEffectText('mavicField', 'award', 1),
+};
+
+function AwardsShowcase() {
+  const { state } = useGame();
+  const have = (k: AwardKey): number => {
+    const d = AWARDS[k];
+    if (d.kind === 'operator') {
+      const o = state.operators[k as OperatorType];
+      return o.available + o.on_mission + o.wounded + o.recovering;
+    }
+    if (d.kind === 'vehicle') return state.vehicles[k as VehicleType] ? 1 : 0;
+    return state.equipment.filter((e) => e.type === k).length;
+  };
+  const got = AWARD_KEYS.filter((k) => have(k) > 0).length;
+  return (
+    <section className="panel awards-panel">
+      <h2>
+        <Icon name="medal" size={20} /> Награды за заслуги · {got}/{AWARD_KEYS.length}
+      </h2>
+      <p className="muted small">
+        Особые бойцы, транспорт и оснащение — чуть сильнее обычных. Их нельзя построить или купить: награды выдаются за заслуги на {AWARD_SOURCE_NAME}.
+      </p>
+      <div className="award-grid">
+        {AWARD_KEYS.map((k) => {
+          const n = have(k);
+          return (
+            <div key={k} className={`award-card ${n ? 'got' : ''}`}>
+              <span className="award-icon">
+                <Icon name={k} size={28} />
+              </span>
+              <b>{AWARDS[k].name}</b>
+              <small>{AWARD_TEXT[k]}</small>
+              <span className={`award-state ${n ? 'on' : ''}`}>{n ? (n > 1 ? `есть ×${n}` : 'получено') : 'ещё не выдано'}</span>
+            </div>
+          );
+        })}
+      </div>
+      {state.awards.length > 0 && (
+        <>
+          <h3>История наград</h3>
+          <ul className="award-history">
+            {state.awards.slice(0, 10).map((a) => (
+              <li key={a.id}>
+                <Icon name="medal" size={14} /> <b>{AWARDS[a.award]?.name ?? a.award}</b>
+                {a.count > 1 ? ` ×${a.count}` : ''}
+                {a.reason ? ` — ${a.reason}` : ''} <span className="muted tiny">{new Date(a.at).toLocaleDateString('ru-RU')}</span>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+    </section>
   );
 }
 

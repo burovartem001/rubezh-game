@@ -4,7 +4,9 @@ import express, { NextFunction, Request, Response } from 'express';
 import { AuthedRequest, cleanupSessions, login, logout, register, requireAuth } from './auth.js';
 import { Db, migrate, pool, tx } from './db.js';
 import { ACTIONS } from './game/actions.js';
-import { GameError, PS, checkTutorial, loadState, saveState, settle, view } from './game/state.js';
+import { GameError, PS, applyAward, checkTutorial, loadState, saveState, settle, view } from './game/state.js';
+import crypto from 'node:crypto';
+import { AWARDS, AWARD_KEYS, AwardKey } from '../../shared/config.js';
 import { log } from './log.js';
 import { APP_ROOT } from './root.js';
 
@@ -92,6 +94,58 @@ api.get('/reports', requireAuth, async (req: AuthedRequest, res) => {
     [req.userId, before],
   );
   res.json({ reports: r.rows.map((x) => ({ id: x.id, createdAt: new Date(x.created_at).getTime(), read: x.is_read, ...x.body })) });
+});
+
+/* ───────── Интеграция с сайтом «Учёт дронов»: выдача наград за заслуги ─────────
+ * Выключена, пока не задан INTEGRATION_KEY. Сайт передаёт ключ в заголовке Authorization: Bearer <ключ>.
+ * GET  /api/integration/awards            — каталог наград
+ * POST /api/integration/award             — { login, award, count?, reason?, externalId? }
+ * externalId (например, id события на сайте) защищает от повторной выдачи при повторе запроса.
+ */
+function integrationAuth(req: Request, res: Response, next: NextFunction) {
+  const key = process.env.INTEGRATION_KEY ?? '';
+  if (key.length < 16) return res.status(503).json({ error: 'Интеграция не настроена' });
+  const got = (req.headers.authorization ?? '').replace(/^Bearer\s+/i, '');
+  const a = Buffer.from(got);
+  const b = Buffer.from(key);
+  if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) {
+    log.warn('integration auth failed', { ip: req.ip });
+    return res.status(401).json({ error: 'Неверный ключ интеграции' });
+  }
+  next();
+}
+api.get('/integration/awards', integrationAuth, (_req, res) => {
+  res.json({ awards: AWARD_KEYS.map((k) => ({ key: k, kind: AWARDS[k].kind, name: AWARDS[k].name })) });
+});
+api.post('/integration/award', integrationAuth, async (req, res) => {
+  const b = req.body ?? {};
+  const login = String(b.login ?? '').trim().toLowerCase();
+  const award = String(b.award ?? '') as AwardKey;
+  const count = Number(b.count ?? 1);
+  const reason = String(b.reason ?? '').trim().slice(0, 200);
+  const externalId = b.externalId == null ? null : String(b.externalId).slice(0, 100);
+  if (!AWARD_KEYS.includes(award)) return res.status(400).json({ error: 'Неизвестная награда', awards: AWARD_KEYS });
+  if (!Number.isInteger(count) || count < 1 || count > 50) return res.status(400).json({ error: 'count: от 1 до 50' });
+  const u = await pool.query('SELECT id FROM users WHERE login=$1', [login]);
+  if (!u.rowCount) return res.status(404).json({ error: 'Игрок с таким логином не найден' });
+  const out = await tx(async (c) => {
+    const ps = await loadState(c, u.rows[0].id);
+    const now = Date.now();
+    if (externalId) {
+      const dup = await c.query(`SELECT id FROM awards WHERE source='uchet-dronov' AND external_id=$1`, [externalId]);
+      if (dup.rowCount) return { ok: true, duplicate: true };
+    }
+    await settle(c, ps, now, { showAwards: false });
+    const text = await applyAward(c, ps, award, count);
+    const r = await c.query(
+      `INSERT INTO awards(user_id, award, count, reason, source, external_id) VALUES ($1,$2,$3,$4,'uchet-dronov',$5) RETURNING id`,
+      [ps.userId, award, count, reason, externalId],
+    );
+    await saveState(c, ps);
+    log.info('award granted', { userId: ps.userId, award, count });
+    return { ok: true, duplicate: false, id: r.rows[0].id, granted: text };
+  });
+  res.json(out);
 });
 
 api.use((_req, res) => res.status(404).json({ error: 'Не найдено' }));

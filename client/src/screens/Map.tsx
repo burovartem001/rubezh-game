@@ -11,7 +11,8 @@ import { Bar, Button, CostLine, RewardLine, Sheet, Sprite, Stepper, fmtLong, pad
 import { ExpeditionRow } from '../components/Queues';
 import { Icon, MISSION_ICON } from '../art/icons';
 import { MapArt } from '../art/MapArt';
-import { Portrait, Speech } from '../art/art';
+import { Portrait, Speech, VehicleArt } from '../art/art';
+import { EquipKind, equipmentPower } from '../../../shared/config';
 
 const TYPE_ICON = { observation: 'observation', warehouse: 'warehouse', stronghold: 'stronghold', route: 'route', event: 'event' } as const;
 const DIFF_NAMES = ['', 'спокойно', 'терпимо', 'горячо', 'опасно', 'очень опасно', 'смертельно опасно'];
@@ -197,7 +198,7 @@ function SectorSheet({ id, onClose }: { id: number; onClose: () => void }) {
 }
 
 function autoGroup(mission: MissionType, avail: Record<OperatorType, number>, cap: number): Group {
-  const order: OperatorType[] = mission === 'recon' ? ['scout', 'babayaga', 'heavy', 'fpv'] : ['fpv', 'heavy', 'babayaga', 'scout'];
+  const order: OperatorType[] = mission === 'recon' ? ['scout', 'babayaga', 'heavy', 'veteran', 'fpv'] : ['veteran', 'fpv', 'heavy', 'babayaga', 'scout'];
   const g: Group = {};
   let left = cap;
   for (const t of order) {
@@ -238,10 +239,10 @@ function GroupBuilder({ sector, mission, onBack, onClose }: { sector: SectorDef;
   const readyEq = state.equipment.filter((e) => e.status === 'ready');
   const [eqIds, setEqIds] = useState<number[]>(() => {
     const pick: number[] = [];
-    const want = mission === 'recon' ? ['commkit', 'repairkit', 'reb'] : ['nsu', 'reb', 'repairkit', 'commkit'];
+    const want: EquipKind[] = mission === 'recon' ? ['recon', 'field', 'losses'] : ['fpv', 'power', 'losses', 'field', 'recon'];
     for (const t of want) {
       if (pick.length >= MAX_EQUIPMENT_PER_GROUP) break;
-      const best = readyEq.filter((e) => e.type === t).sort((a, b) => b.level - a.level)[0];
+      const best = readyEq.filter((e) => EQUIPMENT[e.type].kind === t).sort((a, b) => equipmentPower(b.type, b.rarity, b.level) - equipmentPower(a.type, a.rarity, a.level))[0];
       if (best) pick.push(best.id);
     }
     return pick;
@@ -264,7 +265,7 @@ function GroupBuilder({ sector, mission, onBack, onClose }: { sector: SectorDef;
     const e = readyEq.find((x) => x.id === id)!;
     setEqIds((cur) => {
       if (cur.includes(id)) return cur.filter((x) => x !== id);
-      const withoutSameType = cur.filter((x) => readyEq.find((y) => y.id === x)?.type !== e.type);
+      const withoutSameType = cur.filter((x) => { const y = readyEq.find((q) => q.id === x); return !y || EQUIPMENT[y.type].kind !== EQUIPMENT[e.type].kind; });
       return [...withoutSameType, id].slice(-MAX_EQUIPMENT_PER_GROUP);
     });
   };
@@ -323,7 +324,7 @@ function GroupBuilder({ sector, mission, onBack, onClose }: { sector: SectorDef;
           const ok = row.status === 'ready';
           return (
             <button key={v} className={`veh-card ${vehicle === v ? 'on' : ''}`} disabled={!ok} onClick={() => setVehicle(v)}>
-              <Sprite img="vehicles" index={VEHICLES[v].sprite} className="veh-img" focusY={62} />
+              <VehicleArt type={v} w={124} className="veh-img" />
               <b>{VEHICLES[v].name}</b>
               <small>{ok ? vehicleBonusText(v, row.level) : row.status === 'mission' ? 'в походе' : row.status === 'damaged' ? 'сломан' : 'в мастерской'}</small>
             </button>
@@ -332,7 +333,7 @@ function GroupBuilder({ sector, mission, onBack, onClose }: { sector: SectorDef;
       </div>
 
       <h3>
-        <Icon name="repairkit" size={18} /> Оснащение · до {MAX_EQUIPMENT_PER_GROUP}
+        <Icon name="repairkit" size={18} /> Оснащение · до {MAX_EQUIPMENT_PER_GROUP}, с разным эффектом
       </h3>
       {readyEq.length ? (
         <div className="eq-pick">

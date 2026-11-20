@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ApiError, GameState, NetworkError, api, getToken, setToken } from './api';
 import { GameProvider, Tab, useGame } from './game';
-import { RES_KEYS, RES_NAMES, TUTORIAL } from '../../shared/config';
+import { AWARDS, RES_KEYS, RES_NAMES, TUTORIAL } from '../../shared/config';
 import { COMMANDER_TITLES, LOADING_LINES } from '../../shared/lore';
 import { AuthScreen } from './screens/Auth';
 import { BaseScreen } from './screens/Base';
@@ -102,12 +102,15 @@ function Shell() {
   useEffect(() => {
     if (state.commander.level > lvl.current) {
       setBurst({ title: `Уровень ${state.commander.level}!`, text: `${COMMANDER_TITLES[state.commander.level - 1]}. Доступно новое очко навыка.`, icon: 'star' });
+    } else if (state.newAwards?.length) {
+      const a = state.newAwards[0];
+      setBurst({ title: 'Награда за заслуги!', text: `${AWARDS[a.award]?.name ?? a.award}${a.count > 1 ? ` ×${a.count}` : ''}${a.reason ? ` — ${a.reason}` : ''}. Подарок от сайта «Учёт дронов».`, icon: 'medal' });
     } else if (state.tutorialStep === TUTORIAL.length && step.current < TUTORIAL.length) {
       setBurst({ title: 'Обучение пройдено', text: 'Полигон ваш, командир. Дальше — новые секторы и большие цели.', icon: 'flag' });
     }
     lvl.current = state.commander.level;
     step.current = state.tutorialStep;
-  }, [state.commander.level, state.tutorialStep]);
+  }, [state.commander.level, state.tutorialStep, state.newAwards]);
   const freePoints = state.commander.level - 1 - Object.values(state.commander.skills).reduce((s, v) => s + (v ?? 0), 0);
   const badge = (t: Tab) => (t === 'reports' ? state.unreadReports : t === 'commander' ? freePoints : t === 'map' ? state.expeditions.length : 0);
   return (

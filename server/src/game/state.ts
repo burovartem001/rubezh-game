@@ -35,6 +35,10 @@ import {
   BUILDINGS,
   commanderLevel,
   gameDay,
+  AWARDS,
+  AWARD_SOURCE_NAME,
+  AwardKey,
+  MAX_VEHICLE_LEVEL,
   productionPerHour,
   sectorById,
   storageCap,
@@ -75,6 +79,8 @@ export interface PS {
   expeditions: ExpRow[];
   daily: { day: string; counters: Partial<Record<DailyKey, number>>; claimed: Partial<Record<DailyKey, boolean>> };
   notices: Notice[];
+  awards: AwardRow[];
+  newAwards: { award: AwardKey; count: number; reason: string }[];
 }
 
 const ms = (d: Date | string) => new Date(d).getTime();
@@ -96,7 +102,7 @@ export async function loadState(c: Db, userId: number): Promise<PS> {
   const pr = await c.query('SELECT * FROM players WHERE user_id=$1 FOR UPDATE', [userId]);
   if (!pr.rowCount) throw new GameError('Игрок не найден');
   const r = pr.rows[0];
-  const [b, o, v, e, j, s, x, d] = await Promise.all([
+  const [b, o, v, e, j, s, x, d, aw] = await Promise.all([
     c.query('SELECT key, level FROM buildings WHERE user_id=$1', [userId]),
     c.query('SELECT * FROM operators WHERE user_id=$1', [userId]),
     c.query('SELECT type, level, status FROM vehicles WHERE user_id=$1', [userId]),
@@ -105,6 +111,7 @@ export async function loadState(c: Db, userId: number): Promise<PS> {
     c.query('SELECT * FROM sectors WHERE user_id=$1', [userId]),
     c.query(`SELECT * FROM expeditions WHERE user_id=$1 AND status='active' ORDER BY end_at, id`, [userId]),
     c.query('SELECT day::text AS day, counters, claimed FROM daily WHERE user_id=$1 ORDER BY day DESC LIMIT 1', [userId]),
+    c.query('SELECT id, award, count, reason, source, seen, created_at FROM awards WHERE user_id=$1 ORDER BY created_at DESC, id DESC LIMIT 100', [userId]),
   ]);
   const ps: PS = {
     userId,
@@ -122,6 +129,8 @@ export async function loadState(c: Db, userId: number): Promise<PS> {
     expeditions: x.rows.map((row) => ({ ...row, start_at: ms(row.start_at), end_at: ms(row.end_at) })),
     daily: d.rowCount ? { day: d.rows[0].day, counters: d.rows[0].counters, claimed: d.rows[0].claimed } : { day: '', counters: {}, claimed: {} },
     notices: [],
+    awards: aw.rows.map((r) => ({ ...r, created_at: ms(r.created_at) })),
+    newAwards: [],
   };
   for (const k of BUILDING_KEYS) ps.buildings[k] ??= 1;
   for (const t of OPERATOR_TYPES) ps.ops[t] ??= { available: 0, on_mission: 0, wounded: 0, recovering: 0, lost_total: 0, trained: 0, rank: 1 };
@@ -246,8 +255,9 @@ export function bumpStat(ps: PS, key: string, n = 1) {
 }
 
 export async function addEquipment(c: Db, ps: PS, type: EquipmentType, rarity: Rarity, source: string): Promise<string> {
-  if (ps.equipment.length >= EQUIPMENT_LIMIT) {
-    const comp = { parts: { common: 60, improved: 150, rare: 300 }[rarity] };
+  // наградные предметы не сгорают из-за заполненного склада
+  if (ps.equipment.length >= EQUIPMENT_LIMIT && rarity !== 'award') {
+    const comp = { parts: { common: 60, improved: 150, rare: 300, award: 300 }[rarity] };
     grant(ps, comp);
     return `Склад оснащения заполнен: ${EQUIPMENT[type].name} разобран, получено комплектующих ${comp.parts}`;
   }
@@ -256,9 +266,33 @@ export async function addEquipment(c: Db, ps: PS, type: EquipmentType, rarity: R
   return `Получено оснащение: ${EQUIPMENT[type].name} (${RARITY_NAMES[rarity].toLowerCase()})`;
 }
 
+/* ───────────── награды за заслуги ───────────── */
+
+export interface AwardRow { id: number; award: AwardKey; count: number; reason: string; source: string; seen: boolean; created_at: number }
+
+/** Выдаёт награду из каталога: бойца, транспорт или предмет оснащения. Повторный транспорт повышает его уровень. */
+export async function applyAward(c: Db, ps: PS, key: AwardKey, count: number): Promise<string> {
+  const def = AWARDS[key];
+  const out: string[] = [];
+  for (let i = 0; i < count; i++) {
+    if (def.kind === 'operator') {
+      ps.ops[key as OperatorType].available += 1;
+    } else if (def.kind === 'vehicle') {
+      const v = ps.vehicles[key as VehicleType];
+      if (!v) ps.vehicles[key as VehicleType] = { level: 1, status: 'ready' };
+      else if (v.level < MAX_VEHICLE_LEVEL) v.level++;
+      else grant(ps, { parts: 300 });
+    } else {
+      await addEquipment(c, ps, key as EquipmentType, 'award', AWARD_SOURCE_NAME);
+    }
+  }
+  out.push(`${def.name}${count > 1 ? ` ×${count}` : ''}`);
+  return out.join(', ');
+}
+
 /* ───────────── досчёт времени ───────────── */
 
-export async function settle(c: Db, ps: PS, now: number) {
+export async function settle(c: Db, ps: PS, now: number, opts: { showAwards?: boolean } = {}) {
   touchDaily(ps, now);
   type Ev = { t: number; job?: JobRow; exp?: ExpRow };
   const events: Ev[] = [
@@ -271,6 +305,16 @@ export async function settle(c: Db, ps: PS, now: number) {
     else if (ev.exp) await completeExpedition(c, ps, ev.exp, ev.t);
   }
   accrue(ps, now);
+  // новые награды за заслуги: показать игроку один раз
+  const unseen = opts.showAwards === false ? [] : ps.awards.filter((a) => !a.seen);
+  if (unseen.length) {
+    await c.query('UPDATE awards SET seen=true WHERE user_id=$1 AND NOT seen', [ps.userId]);
+    for (const a of unseen.reverse()) {
+      a.seen = true;
+      ps.newAwards.push({ award: a.award, count: a.count, reason: a.reason });
+      ps.notices.push({ kind: 'success', text: `Награда за заслуги: ${AWARDS[a.award]?.name ?? a.award}${a.count > 1 ? ` ×${a.count}` : ''}${a.reason ? ` — ${a.reason}` : ''}` });
+    }
+  }
   ps.jobs = ps.jobs.filter((j) => !j.done);
   ps.expeditions = ps.expeditions.filter((x) => x.status === 'active');
   await checkTutorial(c, ps);
@@ -491,6 +535,8 @@ export function view(ps: PS, now: number) {
     tutorialStep: ps.p.tutorial_step,
     daily: { day: ps.daily.day, counters: ps.daily.counters, claimed: ps.daily.claimed },
     notices: ps.notices,
+    awards: ps.awards.map((a) => ({ id: a.id, award: a.award, count: a.count, reason: a.reason, at: a.created_at })),
+    newAwards: ps.newAwards,
   };
 }
 export type StateView = ReturnType<typeof view>;

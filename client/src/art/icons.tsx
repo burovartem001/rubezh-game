@@ -41,6 +41,16 @@ const P: Record<string, React.ReactNode> = {
   reb: (<><path d="M12 3l8 3v6c0 4.5-3.5 8-8 9-4.5-1-8-4.5-8-9V6z" /><path d="M7.5 12c1.5-2 3-2 4.5 0s3 2 4.5 0" /></>),
   commkit: (<><rect x="7" y="7" width="10" height="14" rx="2" /><path d="M10 7l-3-5M10 11h4M10 14h4M10 17h4" /></>),
   repairkit: (<><rect x="3" y="7" width="18" height="13" rx="2" /><path d="M9 7V4h6v3M12 10.5v6M9 13.5h6" /></>),
+  // награды
+  veteran: (<><path d="M4 13a8 8 0 0 1 16 0v2H4z" /><path d="M2.5 15h19M8 15v3l4 2 4-2v-3" /><path d="M12 5v3M9 9.5l3-1.5 3 1.5" /></>),
+  gyro: (<><ellipse cx="5" cy="15" rx="3" ry="5" /><ellipse cx="19" cy="15" rx="3" ry="5" /><path d="M7.5 12.5h9l-1 3h-7z" /><path d="M9 14h2M13 14h2" /></>),
+  niva: (<><path d="M2 16v-3.5L4.5 12l2.5-4h8l3 4 3.5.7V16z" /><path d="M8 8l-1.5 4h11M12 8v4" /><circle cx="6.5" cy="16.5" r="2" /><circle cx="17" cy="16.5" r="2" /><path d="M19.5 4l.5 1.2 1.2.5-1.2.5-.5 1.3-.5-1.3-1.2-.5 1.2-.5z" /></>),
+  rebNew: (<><path d="M12 3l8 3v6c0 4.5-3.5 8-8 9-4.5-1-8-4.5-8-9V6z" /><path d="M13 7l-3 5.5h4L11 18" /></>),
+  nsuRubicon: (<><path d="M12 21V11M8 21h8" /><path d="M12 11l-6-7h12z" /><path d="M18.5 13.5l.8 1.7 1.8.3-1.3 1.3.3 1.8-1.6-.9-1.6.9.3-1.8-1.3-1.3 1.8-.3z" /></>),
+  pigGear: (<><path d="M8 3l-3 2v15l3 1h8l3-1V5l-3-2-1.5 3h-5z" /><path d="M8 10h8M8 14h8M10 10v4M14 10v4" /></>),
+  fpvBoevye: (<><rect x="8.5" y="8" width="7" height="4.5" rx="1" /><path d="M8.5 9L5 6M15.5 9L19 6M8.5 11.5L5 14.5M15.5 11.5l3.5 3" /><circle cx="4.5" cy="5.5" r="2" /><circle cx="19.5" cy="5.5" r="2" /><circle cx="4.5" cy="15" r="2" /><circle cx="19.5" cy="15" r="2" /><circle cx="12" cy="19" r="3" /><path d="M11 20.5v-3h1.5a1 1 0 0 1 0 2H11M10.3 19.5h2.2" /></>),
+  mavicField: (<><rect x="9" y="7" width="6" height="5" rx="1.5" /><path d="M9 8L5 5.5M15 8l4-2.5M9 11l-4 2.5M15 11l4 2.5" /><path d="M2.5 5.5h5M16.5 5.5h5M2.5 13.5h5M16.5 13.5h5" /><path d="M2 21c1.5-2 2.5-3 3-5M6 21c.5-1.5 1-2.5 1-4M10 21c0-1.5.5-3 1.5-4M14 21c0-1 .5-2.5 2-4M18 21c.5-1.5 1.5-3 3-4" /></>),
+  medal: (<><path d="M8 2l4 7 4-7M6 2h4M14 2h4" /><circle cx="12" cy="15" r="6" /><path d="M12 11.5l1 2.1 2.3.3-1.7 1.6.4 2.3-2-1.1-2 1.1.4-2.3-1.7-1.6 2.3-.3z" /></>),
   // разное
   clock: (<><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></>),
   star: (<><path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9z" /></>),

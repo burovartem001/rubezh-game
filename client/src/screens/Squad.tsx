@@ -1,16 +1,17 @@
 import React, { useEffect, useState } from 'react';
 import {
   CRAFT, EQUIPMENT, EQUIPMENT_LIMIT, EQUIPMENT_TYPES, EquipmentType, MAX_EQUIPMENT_LEVEL, MAX_RANK, MAX_VEHICLE_LEVEL, OPERATORS, OPERATOR_TYPES,
-  OperatorType, RANK_BONUS, RARITIES, RARITY_NAMES, Rarity, TRAIN_QUEUE_LIMIT, VEHICLES, VEHICLE_REPAIR_TIME, VEHICLE_TYPES, WORKSHOP_QUEUE_LIMIT,
+  OperatorType, RANK_BONUS, RARITIES, RARITY_NAMES, CraftRarity, TRAIN_QUEUE_LIMIT, VEHICLES, VEHICLE_REPAIR_TIME, VEHICLE_TYPES, WORKSHOP_QUEUE_LIMIT,
   WORKSHOP_RARITY_LEVEL, equipmentEffectText, equipmentUpgradeCost, operatorUnlocked, rankRequiredTraining, rankUpgradeCost, rankUpgradeTime,
   recoveryCost, recoveryTime, trainTime, vehicleBonusText, vehicleRepairCost, vehicleUpgradeCost, vehicleUpgradeRequiredWorkshop, vehicleUpgradeTime,
 } from '../../../shared/config';
 import { EMPTY, EQUIPMENT_LORE, OPERATOR_LORE, VEHICLE_LORE } from '../../../shared/lore';
+import { AWARD_SOURCE_NAME } from '../../../shared/config';
 import { useGame } from '../game';
 import { Button, CostLine, Sprite, fmtLong, useAffordable } from '../ui';
 import { JobRow } from '../components/Queues';
 import { Icon } from '../art/icons';
-import { Speech } from '../art/art';
+import { Speech, VehicleArt } from '../art/art';
 
 type SubTab = 'operators' | 'vehicles' | 'equipment';
 
@@ -89,7 +90,9 @@ function Operators() {
           const d = OPERATORS[t];
           const lore = OPERATOR_LORE[t];
           const o = state.operators[t];
-          const unlocked = operatorUnlocked(t, tl, state.buildings.hq);
+          const award = !!d.award;
+          const owned = o.available + o.on_mission + o.wounded + o.recovering > 0;
+          const unlocked = award ? owned : operatorUnlocked(t, tl, state.buildings.hq);
           const inTrain = trainJobs.filter((j) => j.kind === 'train' && j.payload.type === t).reduce((s, j) => s + j.payload.count, 0);
           const time = trainTime(t, tl);
           const nextRank = o.rank + 1;
@@ -101,7 +104,7 @@ function Operators() {
           else if (tl < rankRequiredTraining(nextRank)) rankWhy = `Нужен центр подготовки ${rankRequiredTraining(nextRank)} ур.`;
           else if (!affordable(rankCost)) rankWhy = 'Не хватает ресурсов';
           return (
-            <article key={t} className={`hero-card ${unlocked ? '' : 'locked'}`} data-focus={nav.focus === t}>
+            <article key={t} className={`hero-card ${unlocked ? '' : 'locked'} ${award ? 'award' : ''}`} data-focus={nav.focus === t}>
               <div className="hero-art">
                 <Sprite img="operators" index={d.sprite} className="hero-img" focusY={10} />
                 <span className="hero-rank">
@@ -109,9 +112,14 @@ function Operators() {
                     <i key={i} className={i < o.rank ? 'on' : ''} />
                   ))}
                 </span>
+                {award && (
+                  <span className="award-ribbon">
+                    <Icon name="medal" size={14} /> за заслуги
+                  </span>
+                )}
                 {!unlocked && (
                   <span className="hero-lock">
-                    <Icon name="lock" size={28} />
+                    <Icon name={award ? 'medal' : 'lock'} size={28} />
                   </span>
                 )}
               </div>
@@ -136,6 +144,7 @@ function Operators() {
                 </div>
                 {unlocked ? (
                   <>
+                    {!award && (
                     <div className="train-row">
                       <span className="small">
                         <CostLine cost={d.cost} /> · <Icon name="clock" size={14} /> {fmtLong(time)}
@@ -149,6 +158,7 @@ function Operators() {
                         </Button>
                       </div>
                     </div>
+                    )}
                     {o.rank < MAX_RANK && (
                       <details className="rank-up">
                         <summary>
@@ -164,9 +174,15 @@ function Operators() {
                     )}
                   </>
                 ) : (
-                  <div className="warn-box small">
-                    <Icon name="lock" size={14} /> Откроется: центр подготовки {d.unlock.training} ур.{d.unlock.hq ? `, командный пункт ${d.unlock.hq} ур.` : ''}
-                  </div>
+                  award ? (
+                    <div className="award-box small">
+                      <Icon name="medal" size={16} /> Не обучается: приходит в отряд только за особые заслуги — {AWARD_SOURCE_NAME}.
+                    </div>
+                  ) : (
+                    <div className="warn-box small">
+                      <Icon name="lock" size={14} /> Откроется: центр подготовки {d.unlock.training} ур.{d.unlock.hq ? `, командный пункт ${d.unlock.hq} ур.` : ''}
+                    </div>
+                  )
                 )}
               </div>
             </article>
@@ -201,7 +217,9 @@ function Vehicles() {
           let body: React.ReactNode;
           if (!v) {
             const locked = state.buildings.hq < d.unlockHq;
-            body = locked ? (
+            body = d.award ? (
+              <div className="award-box small"><Icon name="medal" size={16} /> Не строится и не покупается: выдаётся за особые заслуги — {AWARD_SOURCE_NAME}.</div>
+            ) : locked ? (
               <div className="warn-box small"><Icon name="lock" size={14} /> Появится, когда командный пункт дорастёт до {d.unlockHq} уровня</div>
             ) : pending ? (
               <p className="amber small"><Icon name="wrench" size={14} /> Батя уже возится с ним в мастерской…</p>
@@ -245,8 +263,11 @@ function Vehicles() {
             );
           }
           return (
-            <article key={t} className={`veh-big ${v ? '' : 'locked'}`} data-focus={nav.focus === t}>
-              <Sprite img="vehicles" index={d.sprite} className="veh-hero" focusY={62} />
+            <article key={t} className={`veh-big ${v ? '' : 'locked'} ${d.award ? 'award' : ''}`} data-focus={nav.focus === t}>
+              <div className="veh-stage">
+                <VehicleArt type={t} w={230} />
+                {d.award && <span className="award-ribbon"><Icon name="medal" size={14} /> за заслуги</span>}
+              </div>
               <div className="hero-body">
                 <div className="between">
                   <h3><Icon name={t} size={20} /> {d.name}</h3>
@@ -261,7 +282,9 @@ function Vehicles() {
           );
         })}
         <article className="veh-big locked">
-          <Sprite img="vehicles" index={3} className="veh-hero" focusY={62} />
+          <div className="veh-stage">
+            <VehicleArt type="pickup" w={230} />
+          </div>
           <div className="hero-body">
             <h3><Icon name="pickup" size={20} /> Пикап</h3>
             <p className="small">{VEHICLE_LORE.pickup.story}</p>
@@ -278,7 +301,7 @@ function Equipment() {
   const { state, act } = useGame();
   const affordable = useAffordable();
   const ws = state.buildings.workshop;
-  const [rarity, setRarity] = useState<Rarity>('common');
+  const [rarity, setRarity] = useState<CraftRarity>('common');
   const wsJobs = state.jobs.filter((j) => j.queue === 'workshop');
   const pendingCraft = wsJobs.filter((j) => j.kind === 'craft').length;
   const full = state.equipment.length + pendingCraft >= EQUIPMENT_LIMIT;
@@ -300,7 +323,7 @@ function Equipment() {
                 <span className="eq-icon"><Icon name={e.type} size={28} /></span>
                 <span>
                   <b>{EQUIPMENT[e.type].name}</b>
-                  <span className={`tag r-${e.rarity}`}>{RARITY_NAMES[e.rarity]} · {e.level} ур.</span>
+                  <span className={`tag r-${e.rarity}`}>{e.rarity === 'award' && <Icon name="medal" size={12} />} {RARITY_NAMES[e.rarity]} · {e.level} ур.</span>
                 </span>
               </div>
               <p className="small amber">{equipmentEffectText(e.type, e.rarity, e.level)}</p>
@@ -313,9 +336,11 @@ function Equipment() {
                     <Icon name="up" size={15} /> <CostLine cost={cost} check={false} />
                   </Button>
                 )}
-                <Button small kind="danger" disabled={e.status !== 'ready'} onClick={() => { if (confirm(`Разобрать «${EQUIPMENT[e.type].name}»? Вернётся половина комплектующих.`)) act('dismantleEquipment', { id: e.id }); }}>
-                  Разобрать
-                </Button>
+                {e.rarity !== 'award' && (
+                  <Button small kind="danger" disabled={e.status !== 'ready'} onClick={() => { if (confirm(`Разобрать «${EQUIPMENT[e.type].name}»? Вернётся половина комплектующих.`)) act('dismantleEquipment', { id: e.id }); }}>
+                    Разобрать
+                  </Button>
+                )}
               </div>
             </div>
           );
