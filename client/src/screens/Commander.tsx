@@ -2,14 +2,24 @@ import React, { useEffect, useState } from 'react';
 import {
   BRANCH_NAMES, Branch, COMMANDER_MAX_LEVEL, INSIGNIA, PORTRAITS, RESPEC_COST_DATA, SKILLS, SKILL_KEYS, XP_THRESHOLDS, branchPoints, spentPoints,
 } from '../../../shared/config';
+import { COMMANDER_TITLES } from '../../../shared/lore';
 import { useGame } from '../game';
 import { Bar, Button, Sprite } from '../ui';
+import { Icon } from '../art/icons';
+import { RankBadge, Speech } from '../art/art';
 
-const BRANCH_DESC: Record<Branch, string> = {
-  command: 'Вместимость группы, устойчивость, дополнительный слот похода',
-  recon: 'Больше данных, точнее сведения о секторе до отправки',
-  logistics: 'Меньше затрат на поход, выше награда, быстрее восстановление',
+const BRANCH_DESC: Record<Branch, { text: string; icon: string }> = {
+  command: { text: 'Больше бойцов в группе, меньше потерь, лишний поход одновременно.', icon: 'commander' },
+  recon: { text: 'Больше данных и точнее сведения о секторе до отправки.', icon: 'recon' },
+  logistics: { text: 'Дешевле походы, богаче трофеи, быстрее восстановление.', icon: 'supplymission' },
 };
+const STATS: [string, string, string][] = [
+  ['expeditionsSent', 'map', 'походов'],
+  ['expeditionsWon', 'flag', 'успешных'],
+  ['buildsDone', 'hq', 'улучшений'],
+  ['woundedTotal', 'cross', 'ранено'],
+  ['lostTotal', 'skull', 'потеряно'],
+];
 
 export function CommanderScreen() {
   const { state, act, logout } = useGame();
@@ -21,69 +31,123 @@ export function CommanderScreen() {
   const ins = INSIGNIA[state.player.insignia] ?? INSIGNIA[0];
   return (
     <>
-      <section className="panel commander">
+      <section className="cmd-hero">
         <div className="cmd-portrait" style={{ borderColor: ins.color }}>
           <Sprite img="operators" index={state.player.portrait % 4} className="portrait big" focusY={12} />
-          <span className="insignia" style={{ background: ins.color }} aria-label={`Шеврон: ${ins.name}`} />
         </div>
         <div className="cmd-info">
-          <span className="kicker">Командир взвода БПЛА</span>
+          <span className="kicker">{COMMANDER_TITLES[c.level - 1]}</span>
           <h1>«{state.player.callsign}»</h1>
-          <p className="muted">{state.player.commanderName}</p>
-          <div className="between">
-            <b>Уровень {c.level}</b>
-            <span className="num muted small">{nextXp ? `${c.xp} / ${nextXp} опыта` : `${c.xp} опыта · максимум`}</span>
+          <p className="muted">{state.player.commanderName} · командир взвода БПЛА</p>
+          <div className="xp">
+            <div className="between small">
+              <span>
+                <Icon name="star" size={14} /> {c.level} уровень
+              </span>
+              <span className="num muted">{nextXp ? `${c.xp} / ${nextXp}` : `${c.xp} · максимум`}</span>
+            </div>
+            <Bar value={nextXp ? c.xp - prevXp : 1} max={nextXp ? nextXp - prevXp : 1} />
+            {nextXp && (
+              <span className="tiny muted">
+                до звания «{COMMANDER_TITLES[c.level]}» — {nextXp - c.xp} опыта
+              </span>
+            )}
           </div>
-          <Bar value={nextXp ? c.xp - prevXp : 1} max={nextXp ? nextXp - prevXp : 1} />
-          <p className={free > 0 ? 'amber' : 'muted'}>{free > 0 ? `Свободных очков навыков: ${free}` : 'Опыт дают походы. Каждый уровень — одно очко навыка.'}</p>
           <button className="btn secondary small" onClick={() => setEdit((e) => !e)}>
-            {edit ? 'Скрыть профиль' : 'Профиль и экипировка'}
+            <Icon name="settings" size={16} /> {edit ? 'Скрыть' : 'Портрет и шеврон'}
           </button>
         </div>
+        <RankBadge level={c.level} size={84} color={ins.color} />
       </section>
+      {free > 0 ? (
+        <Speech who="sova">
+          Командир, есть {free} {free === 1 ? 'свободное очко' : 'свободных очка'} навыков. Выберите, в чём станем сильнее.
+        </Speech>
+      ) : (
+        <Speech who="sova" compact>
+          Опыт приходит из походов: каждый новый уровень — одно очко навыка.
+        </Speech>
+      )}
       {edit && <ProfileEditor onDone={() => setEdit(false)} />}
 
       <div className="branches">
         {(Object.keys(BRANCH_NAMES) as Branch[]).map((b) => (
-          <section key={b} className="panel branch">
-            <h2>{BRANCH_NAMES[b]}</h2>
-            <p className="muted small">
-              {BRANCH_DESC[b]} · вложено {branchPoints(c.skills, b)}
-            </p>
-            {SKILL_KEYS.filter((k) => SKILLS[k].branch === b).map((k) => {
-              const d = SKILLS[k];
-              const r = c.skills[k] ?? 0;
-              const need = d.needBranchPoints - branchPoints(c.skills, b);
-              let why = '';
-              if (r >= d.max) why = 'Максимум';
-              else if (free <= 0) why = 'Нет свободных очков';
-              else if (need > 0) why = `Вложите в ветку ещё ${need}`;
-              return (
-                <div key={k} className={`skill ${r ? 'has' : ''}`}>
-                  <div className="between">
-                    <b>{d.name}</b>
-                    <span className="pips" aria-label={`${r} из ${d.max}`}>
-                      {Array.from({ length: d.max }, (_, i) => (
-                        <i key={i} className={i < r ? 'on' : ''} />
-                      ))}
+          <section key={b} className={`branch b-${b}`}>
+            <header>
+              <span className="branch-icon">
+                <Icon name={BRANCH_DESC[b].icon} size={26} />
+              </span>
+              <div>
+                <h2>{BRANCH_NAMES[b]}</h2>
+                <p className="tiny muted">{BRANCH_DESC[b].text}</p>
+              </div>
+              <em className="branch-pts">{branchPoints(c.skills, b)}</em>
+            </header>
+            <div className="tree">
+              {SKILL_KEYS.filter((k) => SKILLS[k].branch === b).map((k) => {
+                const d = SKILLS[k];
+                const r = c.skills[k] ?? 0;
+                const need = d.needBranchPoints - branchPoints(c.skills, b);
+                let why = '';
+                if (r >= d.max) why = 'Изучен полностью';
+                else if (free <= 0) why = 'Нет свободных очков';
+                else if (need > 0) why = `Вложите в ветку ещё ${need}`;
+                return (
+                  <div key={k} className={`node-skill ${r ? 'has' : ''} ${r >= d.max ? 'max' : ''} ${need > 0 ? 'closed' : ''}`}>
+                    <span className="node-dot">
+                      {r >= d.max ? <Icon name="check" size={16} /> : need > 0 ? <Icon name="lock" size={14} /> : <Icon name="star" size={14} />}
                     </span>
+                    <div className="node-body">
+                      <div className="between">
+                        <b>{d.name}</b>
+                        <span className="pips" aria-label={`${r} из ${d.max}`}>
+                          {Array.from({ length: d.max }, (_, i) => (
+                            <i key={i} className={i < r ? 'on' : ''} />
+                          ))}
+                        </span>
+                      </div>
+                      <div className="small">{r ? d.describe(r) : <span className="muted">не изучен</span>}</div>
+                      {r < d.max && <div className="tiny amber">дальше: {d.describe(r + 1)}</div>}
+                      {r < d.max && (
+                        <Button small kind={why ? 'secondary' : 'primary'} onClick={() => act('skill', { key: k })} disabled={!!why} why={why}>
+                          <Icon name="plus" size={15} /> Изучить
+                        </Button>
+                      )}
+                    </div>
                   </div>
-                  <div className="small">{r ? `Сейчас: ${d.describe(r)}` : 'Не изучен'}</div>
-                  {r < d.max && <div className="small amber">Следующий ранг: {d.describe(r + 1)}</div>}
-                  <Button small kind="secondary" onClick={() => act('skill', { key: k })} disabled={!!why} why={why}>
-                    Изучить
-                  </Button>
-                </div>
-              );
-            })}
+                );
+              })}
+            </div>
           </section>
         ))}
       </div>
 
       <section className="panel">
-        <h2>Сброс навыков</h2>
+        <h2>
+          <Icon name="reports" size={20} /> Послужной список
+        </h2>
+        <div className="stat-tiles">
+          {STATS.map(([k, ic, label]) => (
+            <div key={k} className="stat-tile">
+              <Icon name={ic} size={22} />
+              <b>{c.stats[k] ?? 0}</b>
+              <span>{label}</span>
+            </div>
+          ))}
+          <div className="stat-tile">
+            <Icon name="flag" size={22} />
+            <b>{state.sectors.filter((s) => s.control >= 100).length}</b>
+            <span>под контролем</span>
+          </div>
+        </div>
+      </section>
+
+      <section className="panel">
+        <h2>
+          <Icon name="back" size={20} /> Сброс навыков
+        </h2>
         <p className="muted small">
-          {c.freeResetUsed ? `Платный сброс: ${RESPEC_COST_DATA} данных.` : 'Один бесплатный сброс, чтобы исправить ошибочный выбор.'} Доступен, когда нет активных походов.
+          {c.freeResetUsed ? `Платный сброс: ${RESPEC_COST_DATA} данных.` : 'Ошиблись с выбором? Один сброс — бесплатно.'} Только когда все группы дома.
         </p>
         <Button
           kind="secondary"
@@ -95,33 +159,9 @@ export function CommanderScreen() {
           Сбросить навыки
         </Button>
       </section>
-
-      <section className="panel">
-        <h2>Статистика</h2>
-        <div className="stats">
-          <span>
-            <b>{c.stats.expeditionsSent ?? 0}</b> походов отправлено
-          </span>
-          <span>
-            <b>{c.stats.expeditionsWon ?? 0}</b> успешных
-          </span>
-          <span>
-            <b>{c.stats.buildsDone ?? 0}</b> улучшений зданий
-          </span>
-          <span>
-            <b>{c.stats.woundedTotal ?? 0}</b> ранено всего
-          </span>
-          <span>
-            <b>{c.stats.lostTotal ?? 0}</b> безвозвратных потерь
-          </span>
-          <span>
-            <b>{state.sectors.filter((s) => s.control >= 100).length}</b> секторов под контролем
-          </span>
-        </div>
-      </section>
       <Settings />
       <button className="btn secondary" onClick={() => confirm('Выйти из аккаунта? Прогресс сохранён на сервере.') && logout()}>
-        Выйти из аккаунта
+        <Icon name="logout" size={18} /> Выйти из аккаунта
       </button>
     </>
   );
@@ -135,7 +175,9 @@ function ProfileEditor({ onDone }: { onDone: () => void }) {
   const [insignia, setInsignia] = useState(state.player.insignia);
   return (
     <section className="panel">
-      <h2>Профиль и экипировка</h2>
+      <h2>
+        <Icon name="settings" size={20} /> Портрет и шеврон
+      </h2>
       <label>
         Позывной
         <input value={callsign} onChange={(e) => setCallsign(e.target.value)} maxLength={24} />
@@ -161,7 +203,9 @@ function ProfileEditor({ onDone }: { onDone: () => void }) {
           </button>
         ))}
       </div>
-      <Button onClick={async () => (await act('profile', { callsign, commanderName: name, portrait, insignia })) && onDone()}>Сохранить</Button>
+      <Button onClick={async () => (await act('profile', { callsign, commanderName: name, portrait, insignia })) && onDone()}>
+        <Icon name="check" size={16} /> Сохранить
+      </Button>
     </section>
   );
 }
@@ -188,14 +232,16 @@ function Settings() {
   }, [reduce, large]);
   return (
     <section className="panel">
-      <h2>Настройки</h2>
+      <h2>
+        <Icon name="settings" size={20} /> Настройки
+      </h2>
       <label className="toggle">
         <input type="checkbox" checked={reduce} onChange={(e) => setReduce(e.target.checked)} /> Уменьшить анимацию
       </label>
       <label className="toggle">
         <input type="checkbox" checked={large} onChange={(e) => setLarge(e.target.checked)} /> Крупный текст
       </label>
-      <p className="muted tiny">Игра сохраняется на сервере автоматически после каждого действия.</p>
+      <p className="muted tiny">Игра сохраняется на сервере после каждого действия.</p>
     </section>
   );
 }

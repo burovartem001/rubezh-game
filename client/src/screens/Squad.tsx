@@ -5,29 +5,34 @@ import {
   WORKSHOP_RARITY_LEVEL, equipmentEffectText, equipmentUpgradeCost, operatorUnlocked, rankRequiredTraining, rankUpgradeCost, rankUpgradeTime,
   recoveryCost, recoveryTime, trainTime, vehicleBonusText, vehicleRepairCost, vehicleUpgradeCost, vehicleUpgradeRequiredWorkshop, vehicleUpgradeTime,
 } from '../../../shared/config';
+import { EMPTY, EQUIPMENT_LORE, OPERATOR_LORE, VEHICLE_LORE } from '../../../shared/lore';
 import { useGame } from '../game';
 import { Button, CostLine, Sprite, fmtLong, useAffordable } from '../ui';
 import { JobRow } from '../components/Queues';
+import { Icon } from '../art/icons';
+import { Speech } from '../art/art';
 
 type SubTab = 'operators' | 'vehicles' | 'equipment';
 
 export function SquadScreen() {
-  const { nav } = useGame();
+  const { nav, state } = useGame();
   const initial: SubTab = nav.focus === 'equipment' ? 'equipment' : nav.focus === 'ebike' || nav.focus === 'vehicles' ? 'vehicles' : 'operators';
   const [tab, setTab] = useState<SubTab>(initial);
   useEffect(() => setTab(initial), [nav]); // eslint-disable-line react-hooks/exhaustive-deps
+  const total = OPERATOR_TYPES.reduce((s, t) => s + state.operators[t].available + state.operators[t].on_mission, 0);
+  const tabs: [SubTab, string, string, number][] = [
+    ['operators', 'Бойцы', 'squad', total],
+    ['vehicles', 'Автопарк', 'bukhanka', Object.keys(state.vehicles).length],
+    ['equipment', 'Оснащение', 'repairkit', state.equipment.length],
+  ];
   return (
     <>
-      <div className="seg big" role="tablist">
-        {(
-          [
-            ['operators', 'Операторы'],
-            ['vehicles', 'Транспорт'],
-            ['equipment', 'Оснащение'],
-          ] as [SubTab, string][]
-        ).map(([k, n]) => (
+      <div className="seg big icons" role="tablist">
+        {tabs.map(([k, n, ic, c]) => (
           <button key={k} role="tab" aria-selected={tab === k} className={tab === k ? 'on' : ''} onClick={() => setTab(k)}>
-            {n}
+            <Icon name={ic} size={20} />
+            <span>{n}</span>
+            <em>{c}</em>
           </button>
         ))}
       </div>
@@ -47,44 +52,42 @@ function Operators() {
   const wounded = Object.fromEntries(OPERATOR_TYPES.map((t) => [t, state.operators[t].wounded])) as Record<OperatorType, number>;
   const totalWounded = OPERATOR_TYPES.reduce((s, t) => s + wounded[t], 0);
   const medic = state.commander.skills.medic ?? 0;
-  const total = OPERATOR_TYPES.reduce((s, t) => s + state.operators[t].available, 0);
   const queueFull = trainJobs.length >= TRAIN_QUEUE_LIMIT;
   return (
     <>
-      <div className="section-head">
-        <h2>Личный состав · {total} доступно</h2>
-        <span className="muted small">Центр подготовки ур. {tl}</span>
-      </div>
       {(trainJobs.length > 0 || recJobs.length > 0) && (
         <section className="panel">
-          <h3>Очередь подготовки · {trainJobs.length}/{TRAIN_QUEUE_LIMIT}</h3>
-          {trainJobs.map((j) => (
-            <JobRow key={j.id} j={j} />
-          ))}
-          {recJobs.map((j) => (
-            <JobRow key={j.id} j={j} />
-          ))}
+          <h3>
+            <Icon name="training" size={18} /> На площадке · {trainJobs.length}/{TRAIN_QUEUE_LIMIT}
+          </h3>
+          {trainJobs.map((j) => <JobRow key={j.id} j={j} />)}
+          {recJobs.map((j) => <JobRow key={j.id} j={j} />)}
         </section>
       )}
       {totalWounded > 0 && (
         <section className="panel warn">
-          <h3>Ранены: {totalWounded}</h3>
-          <p className="muted small">
-            {OPERATOR_TYPES.filter((t) => wounded[t]).map((t) => `${OPERATORS[t].name} — ${wounded[t]}`).join(', ')}. Раненые не участвуют в походах, пока не пройдут восстановление.
-          </p>
-          <div className="between">
-            <span>
-              <CostLine cost={recoveryCost(wounded, medic)} /> · {fmtLong(recoveryTime(totalWounded, medic))}
-            </span>
-          </div>
-          <Button onClick={() => act('recover')} disabled={!affordable(recoveryCost(wounded, medic))} why="Не хватает припасов">
-            Восстановить всех
-          </Button>
+          <Speech
+            who="batya"
+            compact
+            action={
+              <div className="row">
+                <span className="small">
+                  <CostLine cost={recoveryCost(wounded, medic)} /> · <Icon name="clock" size={14} /> {fmtLong(recoveryTime(totalWounded, medic))}
+                </span>
+                <Button small onClick={() => act('recover')} disabled={!affordable(recoveryCost(wounded, medic))} why="Не хватает припасов">
+                  <Icon name="cross" size={16} /> Подлатать всех
+                </Button>
+              </div>
+            }
+          >
+            В медпункте {totalWounded}: {OPERATOR_TYPES.filter((t) => wounded[t]).map((t) => `${OPERATORS[t].name.toLowerCase()} — ${wounded[t]}`).join(', ')}. Пока не отлежатся, в поход не пущу.
+          </Speech>
         </section>
       )}
       <div className="cards">
         {OPERATOR_TYPES.map((t) => {
           const d = OPERATORS[t];
+          const lore = OPERATOR_LORE[t];
           const o = state.operators[t];
           const unlocked = operatorUnlocked(t, tl, state.buildings.hq);
           const inTrain = trainJobs.filter((j) => j.kind === 'train' && j.payload.type === t).reduce((s, j) => s + j.payload.count, 0);
@@ -93,81 +96,76 @@ function Operators() {
           const rankJob = trainJobs.find((j) => j.kind === 'rank' && j.payload.type === t);
           const rankCost = rankUpgradeCost(t, nextRank);
           let rankWhy = '';
-          if (o.rank >= MAX_RANK) rankWhy = 'Максимальный ранг';
-          else if (rankJob) rankWhy = 'Повышение уже в очереди';
+          if (o.rank >= MAX_RANK) rankWhy = 'Выше некуда';
+          else if (rankJob) rankWhy = 'Уже тренируются';
           else if (tl < rankRequiredTraining(nextRank)) rankWhy = `Нужен центр подготовки ${rankRequiredTraining(nextRank)} ур.`;
           else if (!affordable(rankCost)) rankWhy = 'Не хватает ресурсов';
           return (
-            <article key={t} className={`card unit ${unlocked ? '' : 'locked'}`} data-focus={nav.focus === t}>
-              <Sprite img="operators" index={d.sprite} className="portrait" />
-              <div className="card-body">
-                <div className="between">
-                  <h3>{d.name}</h3>
-                  <span className="tag">ранг {o.rank}</span>
+            <article key={t} className={`hero-card ${unlocked ? '' : 'locked'}`} data-focus={nav.focus === t}>
+              <div className="hero-art">
+                <Sprite img="operators" index={d.sprite} className="hero-img" focusY={10} />
+                <span className="hero-rank">
+                  {Array.from({ length: MAX_RANK }, (_, i) => (
+                    <i key={i} className={i < o.rank ? 'on' : ''} />
+                  ))}
+                </span>
+                {!unlocked && (
+                  <span className="hero-lock">
+                    <Icon name="lock" size={28} />
+                  </span>
+                )}
+              </div>
+              <div className="hero-body">
+                <span className="kicker">{lore.nick}</span>
+                <h3>
+                  <Icon name={t} size={18} /> {d.name}
+                </h3>
+                <p className="small">{lore.story}</p>
+                <p className="quote">{lore.quote}</p>
+                <div className="stat-chips">
+                  <span className="sc ok" title="Готовы к походу"><Icon name="check" size={14} /> {o.available}</span>
+                  <span className="sc" title="В походе"><Icon name="map" size={14} /> {o.on_mission}</span>
+                  <span className="sc warn" title="Ранены и на восстановлении"><Icon name="cross" size={14} /> {o.wounded + o.recovering}</span>
+                  {o.lost_total > 0 && <span className="sc bad" title="Безвозвратные потери"><Icon name="skull" size={14} /> {o.lost_total}</span>}
+                  {inTrain > 0 && <span className="sc gold" title="В обучении"><Icon name="training" size={14} /> +{inTrain}</span>}
                 </div>
-                <p className="small">{d.role}</p>
-                <p className="tiny muted">
-                  <span className="olive">+ {d.strong}</span>
-                  <br />
-                  <span className="red">− {d.weak}</span>
-                </p>
-                <div className="counts">
-                  <span>
-                    <b>{o.available}</b> доступны
-                  </span>
-                  <span>
-                    <b>{o.on_mission}</b> в походе
-                  </span>
-                  <span>
-                    <b>{o.wounded + o.recovering}</b> ранены/восст.
-                  </span>
-                  {o.lost_total > 0 && (
-                    <span className="red">
-                      <b>{o.lost_total}</b> потеряно
-                    </span>
-                  )}
-                  {inTrain > 0 && (
-                    <span className="amber">
-                      <b>{inTrain}</b> в обучении
-                    </span>
-                  )}
-                </div>
-                <div className="tiny muted">
-                  Сила {d.power} · разведка {d.recon} · припасы на поход {d.upkeep}
+                <div className="power-row tiny">
+                  <span><Icon name="raid" size={13} /> сила {d.power}</span>
+                  <span><Icon name="recon" size={13} /> разведка {d.recon}</span>
+                  <span><Icon name="supplies" size={13} /> паёк {d.upkeep}</span>
                 </div>
                 {unlocked ? (
                   <>
-                    <div className="spec small">
-                      <span>Подготовка</span>
-                      <span>
-                        <CostLine cost={d.cost} /> · {fmtLong(time)}
+                    <div className="train-row">
+                      <span className="small">
+                        <CostLine cost={d.cost} /> · <Icon name="clock" size={14} /> {fmtLong(time)}
                       </span>
-                    </div>
-                    <div className="row">
-                      <Button small onClick={() => act('train', { type: t, count: 1 })} disabled={queueFull || !affordable(d.cost)} why={queueFull ? 'Очередь заполнена' : 'Не хватает ресурсов'}>
-                        Обучить ×1
-                      </Button>
-                      <Button small kind="secondary" onClick={() => act('train', { type: t, count: 5 })} disabled={queueFull || !affordable(d.cost, 5)}>
-                        ×5
-                      </Button>
+                      <div className="row">
+                        <Button small onClick={() => act('train', { type: t, count: 1 })} disabled={queueFull || !affordable(d.cost)} why={queueFull ? 'Площадка занята' : 'Не хватает ресурсов'}>
+                          <Icon name="plus" size={16} /> Обучить
+                        </Button>
+                        <Button small kind="secondary" onClick={() => act('train', { type: t, count: 5 })} disabled={queueFull || !affordable(d.cost, 5)}>
+                          ×5
+                        </Button>
+                      </div>
                     </div>
                     {o.rank < MAX_RANK && (
-                      <div className="spec small">
-                        <span>
-                          Ранг {nextRank}: +{Math.round(RANK_BONUS * 100)}% к силе и разведке
-                        </span>
-                        <span>
-                          <CostLine cost={rankCost} /> · {fmtLong(rankUpgradeTime(nextRank, tl))}
-                        </span>
-                      </div>
+                      <details className="rank-up">
+                        <summary>
+                          <Icon name="up" size={15} /> Ранг {nextRank}: +{Math.round(RANK_BONUS * 100)}% к силе и разведке
+                        </summary>
+                        <div className="small">
+                          <CostLine cost={rankCost} /> · <Icon name="clock" size={14} /> {fmtLong(rankUpgradeTime(nextRank, tl))}
+                        </div>
+                        <Button small kind="secondary" onClick={() => act('rankUp', { type: t })} disabled={!!rankWhy} why={rankWhy}>
+                          Тренировать
+                        </Button>
+                      </details>
                     )}
-                    <Button small kind="secondary" onClick={() => act('rankUp', { type: t })} disabled={!!rankWhy} why={rankWhy}>
-                      Повысить ранг
-                    </Button>
                   </>
                 ) : (
                   <div className="warn-box small">
-                    Откроется: центр подготовки {d.unlock.training} ур.{d.unlock.hq ? `, командный пункт ${d.unlock.hq} ур.` : ''}
+                    <Icon name="lock" size={14} /> Откроется: центр подготовки {d.unlock.training} ур.{d.unlock.hq ? `, командный пункт ${d.unlock.hq} ур.` : ''}
                   </div>
                 )}
               </div>
@@ -186,16 +184,12 @@ function Vehicles() {
   const wsFull = wsJobs.length >= WORKSHOP_QUEUE_LIMIT;
   return (
     <>
-      <div className="section-head">
-        <h2>Автопарк</h2>
-        <span className="muted small">В походе используется один транспорт</span>
-      </div>
       {wsJobs.length > 0 && (
         <section className="panel">
-          <h3>Мастерская · {wsJobs.length}/{WORKSHOP_QUEUE_LIMIT}</h3>
-          {wsJobs.map((j) => (
-            <JobRow key={j.id} j={j} />
-          ))}
+          <h3>
+            <Icon name="workshop" size={18} /> В мастерской · {wsJobs.length}/{WORKSHOP_QUEUE_LIMIT}
+          </h3>
+          {wsJobs.map((j) => <JobRow key={j.id} j={j} />)}
         </section>
       )}
       <div className="cards">
@@ -203,91 +197,76 @@ function Vehicles() {
           const d = VEHICLES[t];
           const v = state.vehicles[t];
           const pending = wsJobs.find((j) => j.kind === 'vehicle_acquire' && j.payload.type === t);
+          const status = v ? { ready: 'на ходу', mission: 'в походе', damaged: 'сломан', workshop: 'в мастерской' }[v.status] : '';
           let body: React.ReactNode;
           if (!v) {
             const locked = state.buildings.hq < d.unlockHq;
-            body = (
-              <>
-                <p className="small">Бонус: {vehicleBonusText(t, 1)}</p>
-                {locked ? (
-                  <div className="warn-box small">Откроется на командном пункте {d.unlockHq} уровня</div>
-                ) : pending ? (
-                  <p className="amber small">Готовится в мастерской…</p>
-                ) : (
-                  <>
-                    <div className="spec small">
-                      <span>Получить</span>
-                      <span>
-                        <CostLine cost={d.acquireCost} /> · {fmtLong(d.acquireTime)}
-                      </span>
-                    </div>
-                    <Button small onClick={() => act('acquireVehicle', { type: t })} disabled={wsFull || !affordable(d.acquireCost)} why={wsFull ? 'Очередь мастерской заполнена' : 'Не хватает ресурсов'}>
-                      Получить
-                    </Button>
-                  </>
-                )}
-              </>
+            body = locked ? (
+              <div className="warn-box small"><Icon name="lock" size={14} /> Появится, когда командный пункт дорастёт до {d.unlockHq} уровня</div>
+            ) : pending ? (
+              <p className="amber small"><Icon name="wrench" size={14} /> Батя уже возится с ним в мастерской…</p>
+            ) : (
+              <div className="train-row">
+                <span className="small"><CostLine cost={d.acquireCost} /> · <Icon name="clock" size={14} /> {fmtLong(d.acquireTime)}</span>
+                <Button small onClick={() => act('acquireVehicle', { type: t })} disabled={wsFull || !affordable(d.acquireCost)} why={wsFull ? 'Мастерская занята' : 'Не хватает ресурсов'}>
+                  <Icon name="plus" size={16} /> Получить
+                </Button>
+              </div>
             );
           } else {
-            const status = { ready: 'готов', mission: 'в походе', damaged: 'повреждён', workshop: 'в мастерской' }[v.status];
             const upCost = vehicleUpgradeCost(v.level);
             const needWs = vehicleUpgradeRequiredWorkshop(v.level + 1);
             let upWhy = '';
-            if (v.level >= MAX_VEHICLE_LEVEL) upWhy = 'Максимальный уровень';
-            else if (v.status !== 'ready') upWhy = `Сейчас: ${status}`;
+            if (v.level >= MAX_VEHICLE_LEVEL) upWhy = 'Лучше уже не сделать';
+            else if (v.status !== 'ready') upWhy = `Сейчас ${status}`;
             else if (state.buildings.workshop < needWs) upWhy = `Нужна мастерская ${needWs} ур.`;
-            else if (wsFull) upWhy = 'Очередь мастерской заполнена';
+            else if (wsFull) upWhy = 'Мастерская занята';
             else if (!affordable(upCost)) upWhy = 'Не хватает ресурсов';
             body = (
               <>
-                <p className="small">
-                  Ур. {v.level} · <span className={v.status === 'damaged' ? 'red' : v.status === 'ready' ? 'olive' : 'amber'}>{status}</span>
-                </p>
-                <p className="small">Бонус: {vehicleBonusText(t, v.level)}</p>
                 {v.status === 'damaged' && (
-                  <>
-                    <div className="spec small">
-                      <span>Ремонт</span>
-                      <span>
-                        <CostLine cost={vehicleRepairCost(v.level)} /> · {fmtLong(VEHICLE_REPAIR_TIME)}
-                      </span>
-                    </div>
-                    <Button small onClick={() => act('repairVehicle', { type: t })} disabled={wsFull || !affordable(vehicleRepairCost(v.level))} why={wsFull ? 'Очередь мастерской заполнена' : 'Не хватает ресурсов'}>
-                      Отремонтировать
+                  <div className="train-row">
+                    <span className="small red"><Icon name="alert" size={14} /> Нужен ремонт: <CostLine cost={vehicleRepairCost(v.level)} /> · {fmtLong(VEHICLE_REPAIR_TIME)}</span>
+                    <Button small onClick={() => act('repairVehicle', { type: t })} disabled={wsFull || !affordable(vehicleRepairCost(v.level))} why={wsFull ? 'Мастерская занята' : 'Не хватает ресурсов'}>
+                      <Icon name="wrench" size={16} /> Починить
                     </Button>
-                  </>
-                )}
-                {v.level < MAX_VEHICLE_LEVEL && (
-                  <div className="spec small">
-                    <span>Ур. {v.level + 1}: {vehicleBonusText(t, v.level + 1)}</span>
-                    <span>
-                      <CostLine cost={upCost} /> · {fmtLong(vehicleUpgradeTime(v.level))}
-                    </span>
                   </div>
                 )}
-                <Button small kind="secondary" onClick={() => act('upgradeVehicle', { type: t })} disabled={!!upWhy} why={upWhy}>
-                  Улучшить
-                </Button>
+                {v.level < MAX_VEHICLE_LEVEL && (
+                  <details className="rank-up">
+                    <summary><Icon name="up" size={15} /> Уровень {v.level + 1}: {vehicleBonusText(t, v.level + 1)}</summary>
+                    <div className="small"><CostLine cost={upCost} /> · <Icon name="clock" size={14} /> {fmtLong(vehicleUpgradeTime(v.level))}</div>
+                    <Button small kind="secondary" onClick={() => act('upgradeVehicle', { type: t })} disabled={!!upWhy} why={upWhy}>
+                      Улучшить
+                    </Button>
+                  </details>
+                )}
               </>
             );
           }
           return (
-            <article key={t} className="card unit" data-focus={nav.focus === t}>
-              <Sprite img="vehicles" index={d.sprite} className="vehicle" focusY={60} />
-              <div className="card-body">
-                <h3>{d.name}</h3>
-                <p className="muted small">{d.purpose}</p>
+            <article key={t} className={`veh-big ${v ? '' : 'locked'}`} data-focus={nav.focus === t}>
+              <Sprite img="vehicles" index={d.sprite} className="veh-hero" focusY={62} />
+              <div className="hero-body">
+                <div className="between">
+                  <h3><Icon name={t} size={20} /> {d.name}</h3>
+                  {v && <span className={`status-pill s-${v.status}`}>{status} · {v.level} ур.</span>}
+                </div>
+                <p className="small">{VEHICLE_LORE[t].story}</p>
+                <p className="quote">{VEHICLE_LORE[t].quote}</p>
+                <div className="bonus-chip"><Icon name="sparkle" size={14} /> {vehicleBonusText(t, v?.level ?? 1)}</div>
                 {body}
               </div>
             </article>
           );
         })}
-        <article className="card unit locked">
-          <Sprite img="vehicles" index={3} className="vehicle" focusY={60} />
-          <div className="card-body">
-            <h3>Пикап</h3>
-            <p className="muted small">Экспедиции и вывоз наград: больше допустимый объём добычи.</p>
-            <div className="warn-box small">Появится на следующем этапе развития игры</div>
+        <article className="veh-big locked">
+          <Sprite img="vehicles" index={3} className="veh-hero" focusY={62} />
+          <div className="hero-body">
+            <h3><Icon name="pickup" size={20} /> Пикап</h3>
+            <p className="small">{VEHICLE_LORE.pickup.story}</p>
+            <p className="quote">{VEHICLE_LORE.pickup.quote}</p>
+            <div className="warn-box small"><Icon name="clock" size={14} /> Следующий этап развития игры</div>
           </div>
         </article>
       </div>
@@ -307,98 +286,74 @@ function Equipment() {
   return (
     <>
       <div className="section-head">
-        <h2>
-          Склад оснащения · {state.equipment.length}/{EQUIPMENT_LIMIT}
-        </h2>
-        <span className="muted small">В группу — до двух предметов разных типов</span>
+        <h2><Icon name="supply" size={20} /> Склад · {state.equipment.length}/{EQUIPMENT_LIMIT}</h2>
+        <span className="muted small">в поход — до двух разных предметов</span>
       </div>
-      {state.equipment.length === 0 && <p className="muted">Пока пусто. Первый предмет выдаётся в обучении, остальные — из мастерской и походов.</p>}
-      <div className="eq-list">
+      {state.equipment.length === 0 && <Speech who={EMPTY.equipment.who}>{EMPTY.equipment.text}</Speech>}
+      <div className="eq-grid">
         {state.equipment.map((e) => {
           const cost = equipmentUpgradeCost(e.rarity, e.level);
-          const why = e.level >= MAX_EQUIPMENT_LEVEL ? 'Максимальный уровень' : e.status !== 'ready' ? 'В походе' : !affordable(cost) ? 'Не хватает ресурсов' : '';
+          const why = e.level >= MAX_EQUIPMENT_LEVEL ? 'Максимум' : e.status !== 'ready' ? 'В походе' : !affordable(cost) ? 'Не хватает ресурсов' : '';
           return (
-            <div key={e.id} className={`eq rarity-${e.rarity}`}>
-              <div className="eq-icon" aria-hidden>
-                {EQUIPMENT[e.type].icon}
-              </div>
-              <div className="eq-body">
-                <div className="between">
+            <div key={e.id} className={`eq-card rarity-${e.rarity}`}>
+              <div className="eq-top">
+                <span className="eq-icon"><Icon name={e.type} size={28} /></span>
+                <span>
                   <b>{EQUIPMENT[e.type].name}</b>
-                  <span className={`tag r-${e.rarity}`}>{RARITY_NAMES[e.rarity]}</span>
-                </div>
-                <div className="small">
-                  Ур. {e.level} · {equipmentEffectText(e.type, e.rarity, e.level)}
-                </div>
-                <div className="tiny muted">
-                  {e.status === 'mission' ? 'в походе' : 'на складе'} · источник: {e.source}
-                  {e.level < MAX_EQUIPMENT_LEVEL && (
-                    <>
-                      {' '}· ур. {e.level + 1}: {equipmentEffectText(e.type, e.rarity, e.level + 1)}
-                    </>
-                  )}
-                </div>
-                <div className="row">
-                  {e.level < MAX_EQUIPMENT_LEVEL && (
-                    <span className="small">
-                      <CostLine cost={cost} />
-                    </span>
-                  )}
+                  <span className={`tag r-${e.rarity}`}>{RARITY_NAMES[e.rarity]} · {e.level} ур.</span>
+                </span>
+              </div>
+              <p className="small amber">{equipmentEffectText(e.type, e.rarity, e.level)}</p>
+              <p className="tiny muted">
+                {e.status === 'mission' ? <><Icon name="map" size={12} /> сейчас в походе</> : <>из: {e.source}</>}
+              </p>
+              <div className="row">
+                {e.level < MAX_EQUIPMENT_LEVEL && (
                   <Button small kind="secondary" onClick={() => act('upgradeEquipment', { id: e.id })} disabled={!!why} why={why}>
-                    Улучшить
+                    <Icon name="up" size={15} /> <CostLine cost={cost} check={false} />
                   </Button>
-                  <Button
-                    small
-                    kind="danger"
-                    disabled={e.status !== 'ready'}
-                    onClick={() => {
-                      if (confirm(`Разобрать «${EQUIPMENT[e.type].name}»? Вернётся половина комплектующих.`)) act('dismantleEquipment', { id: e.id });
-                    }}
-                  >
-                    Разобрать
-                  </Button>
-                </div>
+                )}
+                <Button small kind="danger" disabled={e.status !== 'ready'} onClick={() => { if (confirm(`Разобрать «${EQUIPMENT[e.type].name}»? Вернётся половина комплектующих.`)) act('dismantleEquipment', { id: e.id }); }}>
+                  Разобрать
+                </Button>
               </div>
             </div>
           );
         })}
       </div>
 
-      <section className="panel">
-        <h2>Мастерская БПЛА · ур. {ws}</h2>
-        {wsJobs.map((j) => (
-          <JobRow key={j.id} j={j} />
-        ))}
+      <section className="panel workshop">
+        <h2><Icon name="workshop" size={20} /> Мастерская Бати · {ws} ур.</h2>
+        <Speech who="batya" compact>Выбирай, что собрать. Чем лучше мастерская — тем редкие вещи мне по силам.</Speech>
+        {wsJobs.map((j) => <JobRow key={j.id} j={j} />)}
         <div className="seg">
           {RARITIES.map((r) => (
-            <button key={r} className={rarity === r ? 'on' : ''} onClick={() => setRarity(r)}>
-              {RARITY_NAMES[r]}
-              {ws < WORKSHOP_RARITY_LEVEL[r] ? ` · ур. ${WORKSHOP_RARITY_LEVEL[r]}` : ''}
+            <button key={r} className={`${rarity === r ? 'on' : ''} r-${r}`} onClick={() => setRarity(r)}>
+              {ws < WORKSHOP_RARITY_LEVEL[r] && <Icon name="lock" size={13} />} {RARITY_NAMES[r]}
             </button>
           ))}
         </div>
         <p className="small">
-          Сборка: <CostLine cost={CRAFT[rarity].cost} /> · {fmtLong(CRAFT[rarity].time)}
+          Цена сборки: <CostLine cost={CRAFT[rarity].cost} /> · <Icon name="clock" size={14} /> {fmtLong(CRAFT[rarity].time)}
         </p>
-        <div className="eq-list">
+        <div className="eq-grid">
           {EQUIPMENT_TYPES.map((t: EquipmentType) => {
             let why = '';
-            if (ws < WORKSHOP_RARITY_LEVEL[rarity]) why = `Нужна мастерская ${WORKSHOP_RARITY_LEVEL[rarity]} уровня`;
-            else if (full) why = 'Склад оснащения заполнен';
-            else if (wsFull) why = 'Очередь мастерской заполнена';
+            if (ws < WORKSHOP_RARITY_LEVEL[rarity]) why = `Нужна мастерская ${WORKSHOP_RARITY_LEVEL[rarity]} ур.`;
+            else if (full) why = 'Склад забит';
+            else if (wsFull) why = 'Мастерская занята';
             else if (!affordable(CRAFT[rarity].cost)) why = 'Не хватает ресурсов';
             return (
-              <div key={t} className="eq">
-                <div className="eq-icon" aria-hidden>
-                  {EQUIPMENT[t].icon}
-                </div>
-                <div className="eq-body">
+              <div key={t} className={`eq-card blueprint rarity-${rarity}`}>
+                <div className="eq-top">
+                  <span className="eq-icon"><Icon name={t} size={28} /></span>
                   <b>{EQUIPMENT[t].name}</b>
-                  <div className="small">{equipmentEffectText(t, rarity, 1)}</div>
-                  <Button small onClick={() => act('craft', { type: t, rarity })} disabled={!!why} why={why}>
-                    Собрать
-                  </Button>
                 </div>
+                <p className="tiny muted">{EQUIPMENT_LORE[t]}</p>
+                <p className="small amber">{equipmentEffectText(t, rarity, 1)}</p>
+                <Button small onClick={() => act('craft', { type: t, rarity })} disabled={!!why} why={why}>
+                  <Icon name="wrench" size={15} /> Собрать
+                </Button>
               </div>
             );
           })}

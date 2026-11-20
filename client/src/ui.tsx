@@ -1,6 +1,7 @@
 import React, { useEffect } from 'react';
-import { Cost, RES_ICONS, RES_KEYS, RES_NAMES, ResKey } from '../../shared/config';
+import { Cost, RES_KEYS, RES_NAMES, ResKey } from '../../shared/config';
 import { useGame } from './game';
+import { Icon } from './art/icons';
 
 export function fmtDur(sec: number): string {
   sec = Math.max(0, Math.ceil(sec));
@@ -38,7 +39,7 @@ export function CostLine({ cost, check = true, mult = 1 }: { cost: Cost; check?:
         const lack = check && res(k) < need;
         return (
           <span key={k} className={`cost ${lack ? 'lack' : ''}`} title={RES_NAMES[k]}>
-            <i aria-hidden>{RES_ICONS[k]}</i> {need}
+            <Icon name={k} size={15} /> {need}
             <span className="sr">{RES_NAMES[k]}</span>
             {lack && <small> (не хватает {need - res(k)})</small>}
           </span>
@@ -58,7 +59,7 @@ export function RewardLine({ cost }: { cost: Cost }) {
     <span className="costline">
       {keys.map((k) => (
         <span key={k} className="cost gain" title={RES_NAMES[k]}>
-          <i aria-hidden>{RES_ICONS[k]}</i> +{cost[k]}
+          <Icon name={k} size={15} /> +{cost[k]}
           <span className="sr">{RES_NAMES[k]}</span>
         </span>
       ))}
@@ -107,7 +108,7 @@ export function Sheet({ title, onClose, children, wide }: { title: React.ReactNo
         <div className="sheet-head">
           <h2>{title}</h2>
           <button className="icon-btn" onClick={onClose} aria-label="Закрыть">
-            ✕
+            <Icon name="close" size={20} />
           </button>
         </div>
         <div className="sheet-body">{children}</div>
@@ -120,11 +121,11 @@ export function Stepper({ value, min = 0, max, onChange, label }: { value: numbe
   return (
     <div className="stepper" aria-label={label}>
       <button type="button" disabled={value <= min} onClick={() => onChange(value - 1)} aria-label={`Меньше: ${label}`}>
-        −
+        <Icon name="minus" size={18} />
       </button>
       <b className="num">{value}</b>
       <button type="button" disabled={value >= max} onClick={() => onChange(value + 1)} aria-label={`Больше: ${label}`}>
-        +
+        <Icon name="plus" size={18} />
       </button>
     </div>
   );

@@ -3,6 +3,9 @@ import { BUILDINGS, EQUIPMENT, EXPEDITION_PHASES, MISSIONS, OPERATORS, OperatorT
 import type { Expedition, GameState, Job } from '../api';
 import { useGame } from '../game';
 import { Countdown, JobProgress, Sheet, fmtDur, pad2 } from '../ui';
+import { Icon, MISSION_ICON } from '../art/icons';
+import { Speech } from '../art/art';
+import { EMPTY } from '../../../shared/lore';
 
 export function jobTitle(j: Job): string {
   const p = j.payload;
@@ -18,6 +21,17 @@ export function jobTitle(j: Job): string {
     default: return j.kind;
   }
 }
+export function jobIcon(j: Job): string {
+  const p = j.payload;
+  switch (j.kind) {
+    case 'build': return p.building;
+    case 'train': case 'rank': return p.type;
+    case 'recover': return 'cross';
+    case 'craft': return p.type;
+    default: return p.type ?? 'wrench';
+  }
+}
+const QUEUE_ICON: Record<Job['queue'], string> = { build: 'hq', train: 'training', workshop: 'workshop', recovery: 'cross' };
 export const QUEUE_NAMES: Record<Job['queue'], string> = { build: 'Строительство', train: 'Подготовка', workshop: 'Мастерская', recovery: 'Восстановление' };
 
 export function expeditionPhase(x: Expedition, now: number) {
@@ -39,10 +53,11 @@ export function ExpeditionRow({ x }: { x: Expedition }) {
   const ph = expeditionPhase(x, now);
   const n = Object.values(x.group).reduce((a, b) => a + (b ?? 0), 0);
   return (
-    <div className="qrow">
+    <div className="qrow exp">
       <div className="between">
-        <b>
-          Сектор {pad2(s.id)} · {MISSIONS[x.mission].name}
+        <b className="qtitle">
+          <span className="qicon"><Icon name={MISSION_ICON[x.mission]} size={18} /></span>
+          {MISSIONS[x.mission].name} · {s.name}
         </b>
         <Countdown start={x.startAt} end={x.endAt} />
       </div>
@@ -68,7 +83,10 @@ export function JobRow({ j }: { j: Job }) {
   return (
     <div className="qrow">
       <div className="between">
-        <b>{jobTitle(j)}</b>
+        <b className="qtitle">
+          <span className="qicon"><Icon name={jobIcon(j)} size={18} /></span>
+          {jobTitle(j)}
+        </b>
         <Countdown start={j.startAt} end={j.endAt} />
       </div>
       <JobProgress start={j.startAt} end={j.endAt} />
@@ -82,15 +100,15 @@ export function QueuesSheet({ onClose }: { onClose: () => void }) {
   return (
     <Sheet title="Очереди и походы" onClose={onClose}>
       <h3>
-        Походы · {state.expeditions.length} / {state.slots}
+        <Icon name="map" size={18} /> Походы · {state.expeditions.length} / {state.slots}
       </h3>
-      {state.expeditions.length ? state.expeditions.map((x) => <ExpeditionRow key={x.id} x={x} />) : <p className="muted">Активных походов нет.</p>}
+      {state.expeditions.length ? state.expeditions.map((x) => <ExpeditionRow key={x.id} x={x} />) : <Speech who={EMPTY.expeditions.who} compact>{EMPTY.expeditions.text}</Speech>}
       {queues.map((q) => {
         const jobs = state.jobs.filter((j) => j.queue === q);
         return (
           <div key={q}>
-            <h3>{QUEUE_NAMES[q]}</h3>
-            {jobs.length ? jobs.map((j) => <JobRow key={j.id} j={j} />) : <p className="muted">Свободна.</p>}
+            <h3><Icon name={QUEUE_ICON[q]} size={18} /> {QUEUE_NAMES[q]}</h3>
+            {jobs.length ? jobs.map((j) => <JobRow key={j.id} j={j} />) : <p className="muted small">Свободна — можно ставить задачу.</p>}
           </div>
         );
       })}

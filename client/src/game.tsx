@@ -1,6 +1,21 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { ApiError, GameState, NetworkError, api, setToken } from './api';
 import { PRODUCED_KEYS, ResKey } from '../../shared/config';
+import { Icon } from './art/icons';
+
+function toastIcon(t: Toast): string {
+  const x = t.text.toLowerCase();
+  if (t.kind === 'error') return 'alert';
+  if (x.includes('поход') || x.includes('группа')) return 'map';
+  if (x.includes('улучш')) return 'up';
+  if (x.includes('подготов') || x.includes('ранг')) return 'training';
+  if (x.includes('оснащ') || x.includes('сборка')) return 'repairkit';
+  if (x.includes('командир') || x.includes('уровн')) return 'star';
+  if (x.includes('цель') || x.includes('обучени')) return 'flag';
+  if (x.includes('восстанов')) return 'cross';
+  if (x.includes('ремонт') || x.includes('автопарк')) return 'wrench';
+  return t.kind === 'success' ? 'check' : 'radio';
+}
 
 export type Tab = 'base' | 'map' | 'squad' | 'commander' | 'reports';
 export interface Toast { id: number; kind: 'info' | 'success' | 'warn' | 'error'; text: string }
@@ -170,7 +185,8 @@ export function GameProvider({ initial, onLogout, children }: { initial: GameSta
       <div className="toasts" role="status" aria-live="polite">
         {toasts.map((t) => (
           <div key={t.id} className={`toast ${t.kind}`} onClick={() => setToasts((x) => x.filter((y) => y.id !== t.id))}>
-            {t.text}
+            <Icon name={toastIcon(t)} size={20} />
+            <span>{t.text}</span>
           </div>
         ))}
       </div>

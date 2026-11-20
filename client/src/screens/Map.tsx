@@ -1,15 +1,20 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
-  EQUIPMENT, HOME, MAX_EQUIPMENT_PER_GROUP, MISSIONS, MissionType, OPERATORS, OPERATOR_TYPES, OUTCOME_NAMES, OperatorType, RARITY_NAMES,
+  EQUIPMENT, MAX_EQUIPMENT_PER_GROUP, MISSIONS, MissionType, OPERATORS, OPERATOR_TYPES, OUTCOME_NAMES, OUTCOME_ORDER, OperatorType, RARITY_NAMES,
   SECTORS, SECTOR_MISSIONS, SECTOR_TYPE_NAMES, SectorDef, VEHICLES, VEHICLE_TYPES, VehicleType, equipmentEffectText, missionRewards,
   sectorById, vehicleBonusText,
 } from '../../../shared/config';
-import { Group, groupSize, outcomeRangeText, planExpedition } from '../../../shared/calc';
+import { Group, groupSize, planExpedition } from '../../../shared/calc';
+import { MISSION_LORE, SECTOR_LORE, SECTOR_TYPE_LORE } from '../../../shared/lore';
 import { useGame } from '../game';
-import { Bar, Button, CostLine, RewardLine, Sheet, fmtLong, pad2, useAffordable } from '../ui';
-import { ExpeditionRow, expeditionPhase } from '../components/Queues';
+import { Bar, Button, CostLine, RewardLine, Sheet, Sprite, Stepper, fmtLong, pad2, useAffordable } from '../ui';
+import { ExpeditionRow } from '../components/Queues';
+import { Icon, MISSION_ICON } from '../art/icons';
+import { MapArt } from '../art/MapArt';
+import { Portrait, Speech } from '../art/art';
 
-const TYPE_GLYPH = { observation: '◎', warehouse: '▣', stronghold: '◆', route: '⇢', event: '✦' } as const;
+const TYPE_ICON = { observation: 'observation', warehouse: 'warehouse', stronghold: 'stronghold', route: 'route', event: 'event' } as const;
+const DIFF_NAMES = ['', 'спокойно', 'терпимо', 'горячо', 'опасно', 'очень опасно', 'смертельно опасно'];
 
 export function MapScreen() {
   const { state, nav, now } = useGame();
@@ -19,134 +24,87 @@ export function MapScreen() {
     if (nav.tab === 'map' && nav.focus?.startsWith('sector-')) setSel(Number(nav.focus.slice(7)));
   }, [nav]);
   const ss = (id: number) => state.sectors.find((s) => s.id === id)!;
-  const pos = (id: number) => (id === 0 ? HOME : sectorById(id)!);
-  const edges = useMemo(() => {
-    const out: [number, number][] = [];
-    for (const s of SECTORS) for (const l of s.links) if (l < s.id) out.push([l, s.id]);
-    return out;
-  }, []);
-  const known = (id: number) => id === 0 || ss(id).unlocked || SECTORS.find((s) => s.id === id)!.links.some((l) => l === 0 || ss(l)?.unlocked);
+  const opened = SECTORS.filter((s) => ss(s.id).unlocked);
+  const controlled = state.sectors.filter((s) => s.control >= 100).length;
 
   return (
     <>
       <div className="section-head">
-        <h2>Карта секторов</h2>
-        <span className="muted small">
-          ◇ {Math.floor(state.resources.data)} данных · походы {state.expeditions.length}/{state.slots}
-        </span>
+        <h2>
+          <Icon name="map" size={22} /> Карта секторов
+        </h2>
+        <div className="chips-row">
+          <span className="pill"><Icon name="compass" size={15} /> открыто {opened.length}/12</span>
+          <span className="pill"><Icon name="flag" size={15} /> под контролем {controlled}</span>
+          <span className="pill gold"><Icon name="drone" size={15} /> в походе {state.expeditions.length}/{state.slots}</span>
+        </div>
       </div>
       <div className="map-wrap">
         <div className="map-scroll">
-          <svg className="map" viewBox="0 0 100 100" style={{ width: `${zoom * 100}%` }} role="img" aria-label="Схема секторов">
-            <defs>
-              <pattern id="grid" width="10" height="10" patternUnits="userSpaceOnUse">
-                <path d="M10 0H0V10" fill="none" stroke="#2c3d36" strokeWidth=".2" />
-              </pattern>
-              <radialGradient id="fog" cx="50%" cy="100%" r="90%">
-                <stop offset="0" stopColor="#2f4a3f" />
-                <stop offset="1" stopColor="#0f1a1b" />
-              </radialGradient>
-            </defs>
-            <rect width="100" height="100" fill="url(#fog)" />
-            <rect width="100" height="100" fill="url(#grid)" />
-            {/* условная линия соприкосновения */}
-            <path d="M0 16 C 20 20, 35 8, 55 14 S 85 22, 100 12" fill="none" stroke="#b36d5e" strokeWidth=".5" strokeDasharray="1.5 1.2" opacity=".7" />
-            <text x="2" y="12" className="map-label red">УСЛОВНАЯ ЛБС</text>
-            {edges.map(([a, b]) => {
-              const A = pos(a), B = pos(b);
-              const vis = known(a) && known(b);
-              const open = (a === 0 || ss(a).unlocked) && ss(b).unlocked;
-              return <line key={`${a}-${b}`} x1={A.x} y1={A.y} x2={B.x} y2={B.y} className={`edge ${open ? 'open' : vis ? 'vis' : 'hid'}`} />;
-            })}
-            {state.expeditions.map((x) => {
-              const S = sectorById(x.sectorId)!;
-              const f = expeditionPhase(x, now).f;
-              const k = Math.min(1, Math.max(0, f < 0.4 ? f / 0.4 : f < 0.6 ? 1 : 1 - (f - 0.6) / 0.4));
-              const cx = HOME.x + (S.x - HOME.x) * k;
-              const cy = HOME.y + (S.y - HOME.y) * k;
-              return (
-                <g key={x.id}>
-                  <line x1={HOME.x} y1={HOME.y} x2={S.x} y2={S.y} className="route" />
-                  <circle cx={cx} cy={cy} r="1.6" className="unit" />
-                </g>
-              );
-            })}
-            <g className="node home">
-              <rect x={HOME.x - 4} y={HOME.y - 3} width="8" height="6" rx="1" />
-              <text x={HOME.x} y={HOME.y + 1.1} textAnchor="middle">⌂</text>
-              <text x={HOME.x} y={HOME.y + 6.5} textAnchor="middle" className="map-label">ПОЛИГОН</text>
-            </g>
-            {SECTORS.map((s) => {
-              const st = ss(s.id);
-              const vis = known(s.id);
-              const cls = !st.unlocked ? 'locked' : st.control >= 100 ? 'controlled' : st.successes > 0 ? 'visited' : 'open';
-              const active = state.expeditions.some((x) => x.sectorId === s.id);
-              return (
-                <g
-                  key={s.id}
-                  className={`node ${cls} ${sel === s.id ? 'sel' : ''} ${vis ? '' : 'fog'} ${active ? 'active' : ''}`}
-                  onClick={() => setSel(s.id)}
-                  role="button"
-                  tabIndex={0}
-                  aria-label={`Сектор ${s.id}: ${vis ? s.name : 'не разведан'}`}
-                  onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && setSel(s.id)}
-                >
-                  <circle cx={s.x} cy={s.y} r="7" className="hit" />
-                  <circle cx={s.x} cy={s.y} r="3.6" className="ring" />
-                  <text x={s.x} y={s.y + 1.2} textAnchor="middle" className="glyph">
-                    {vis ? TYPE_GLYPH[s.type] : '?'}
-                  </text>
-                  <text x={s.x} y={s.y - 4.8} textAnchor="middle" className="map-num">
-                    {pad2(s.id)}
-                  </text>
-                  {vis && (
-                    <text x={s.x} y={s.y + 6.6} textAnchor="middle" className="map-label">
-                      {s.name.toUpperCase()}
-                    </text>
-                  )}
-                  {st.unlocked && st.recon > 0 && <rect x={s.x - 3.5} y={s.y + 7.6} width={(7 * st.recon) / 100} height=".7" className="recon-bar" />}
-                </g>
-              );
-            })}
-          </svg>
+          <div style={{ width: `${zoom * 100}%` }}>
+            <MapArt sectors={state.sectors} expeditions={state.expeditions} now={now} selected={sel} onSelect={setSel} />
+          </div>
         </div>
         <div className="map-tools">
           <button className="icon-btn" onClick={() => setZoom((z) => Math.min(2.5, z + 0.5))} aria-label="Приблизить">
-            +
+            <Icon name="plus" size={20} />
           </button>
           <button className="icon-btn" onClick={() => setZoom((z) => Math.max(1, z - 0.5))} aria-label="Отдалить">
-            −
+            <Icon name="minus" size={20} />
           </button>
         </div>
       </div>
       <div className="legend small">
-        <span><i className="lg open" /> доступен</span>
-        <span><i className="lg visited" /> пройден</span>
+        <span><i className="lg open" /> можно идти</span>
+        <span><i className="lg visited" /> уже были</span>
         <span><i className="lg controlled" /> под контролем</span>
-        <span><i className="lg locked" /> закрыт</span>
+        <span><i className="lg locked" /> в тумане</span>
       </div>
+
       {state.expeditions.length > 0 && (
         <section className="panel">
-          <h2>Группы в походе</h2>
+          <h2>
+            <Icon name="radio" size={20} /> В эфире
+          </h2>
           {state.expeditions.map((x) => (
             <ExpeditionRow key={x.id} x={x} />
           ))}
         </section>
       )}
+
+      <div className="section-head">
+        <h2>
+          <Icon name="flag" size={20} /> Доступные секторы
+        </h2>
+      </div>
       <section className="sector-list">
-        {SECTORS.filter((s) => ss(s.id).unlocked).map((s) => (
-          <button key={s.id} className="sector-item" onClick={() => setSel(s.id)}>
-            <span className="glyph">{TYPE_GLYPH[s.type]}</span>
-            <span>
-              <b>
-                {pad2(s.id)} · {s.name}
-              </b>
-              <small className="muted">
-                {SECTOR_TYPE_NAMES[s.type]} · сложность {s.difficulty} · разведка {ss(s.id).recon}%
-              </small>
-            </span>
-          </button>
-        ))}
+        {opened.map((s) => {
+          const st = ss(s.id);
+          const busy = state.expeditions.some((x) => x.sectorId === s.id);
+          return (
+            <button key={s.id} className={`sector-card t-${s.type}`} onClick={() => setSel(s.id)}>
+              <span className="sector-badge">
+                <Icon name={TYPE_ICON[s.type]} size={24} />
+                <em>{pad2(s.id)}</em>
+              </span>
+              <span className="sector-info">
+                <b>{s.name}</b>
+                <small>{SECTOR_TYPE_NAMES[s.type]}</small>
+                <span className="diff" aria-label={`Сложность ${s.difficulty}`}>
+                  {Array.from({ length: 6 }, (_, i) => (
+                    <i key={i} className={i < s.difficulty ? 'on' : ''} />
+                  ))}
+                  <span>{DIFF_NAMES[s.difficulty]}</span>
+                </span>
+                <Bar value={st.recon} />
+              </span>
+              <span className="sector-side">
+                {busy ? <span className="pill gold small"><Icon name="drone" size={14} /> там группа</span> : <Icon name="arrow" size={20} />}
+                <small className="muted">разв. {st.recon}%</small>
+              </span>
+            </button>
+          );
+        })}
       </section>
       {sel != null && <SectorSheet id={sel} onClose={() => setSel(null)} />}
     </>
@@ -159,57 +117,76 @@ function SectorSheet({ id, onClose }: { id: number; onClose: () => void }) {
   const st = state.sectors.find((x) => x.id === id)!;
   const [mission, setMission] = useState<MissionType | null>(null);
   if (mission) return <GroupBuilder sector={s} mission={mission} onBack={() => setMission(null)} onClose={onClose} />;
-  const diff = ['—', 'низкая', 'низкая', 'средняя', 'высокая', 'высокая', 'очень высокая'][s.difficulty];
   return (
-    <Sheet title={`Сектор ${pad2(s.id)} · ${st.unlocked ? s.name : 'закрыт'}`} onClose={onClose}>
+    <Sheet title={`Сектор ${pad2(s.id)}`} onClose={onClose}>
+      <div className={`sector-hero t-${s.type} ${st.unlocked ? '' : 'locked'}`}>
+        <div className="sector-hero-icon">
+          <Icon name={st.unlocked ? TYPE_ICON[s.type] : 'lock'} size={40} stroke={1.5} />
+        </div>
+        <div>
+          <span className="kicker">{st.unlocked ? SECTOR_TYPE_NAMES[s.type] : 'Закрытый район'}</span>
+          <h2>{st.unlocked ? s.name : 'Туман войны'}</h2>
+          {st.unlocked && (
+            <span className="diff big">
+              {Array.from({ length: 6 }, (_, i) => (
+                <i key={i} className={i < s.difficulty ? 'on' : ''} />
+              ))}
+              <span>{DIFF_NAMES[s.difficulty]}</span>
+            </span>
+          )}
+        </div>
+      </div>
       {!st.unlocked ? (
-        <>
-          <p className="muted">Вымышленный игровой сектор. Сведений пока нет.</p>
-          <div className="warn-box">Чтобы открыть: {st.lockReason}</div>
-        </>
+        <Speech who="iskra">
+          Пока не слышу, что там творится. {st.lockReason}. Тогда и посмотрим.
+        </Speech>
       ) : (
         <>
-          <p className="muted">
-            {SECTOR_TYPE_NAMES[s.type]} · сложность {s.difficulty} ({diff}) · походов {st.attempts}, успешных {st.successes}
-          </p>
-          <div className="spec">
-            <span>Разведанность</span>
-            <b>{st.recon}%</b>
+          <p className="story">{SECTOR_LORE[s.id]} <span className="muted">{SECTOR_TYPE_LORE[s.type]}</span></p>
+          <div className="meters">
+            <div>
+              <span className="meter-label"><Icon name="recon" size={16} /> Разведанность <b>{st.recon}%</b></span>
+              <Bar value={st.recon} />
+            </div>
+            <div>
+              <span className="meter-label"><Icon name="flag" size={16} /> Контроль <b>{st.control}%</b></span>
+              <Bar value={st.control} tone="olive" />
+            </div>
           </div>
-          <Bar value={st.recon} />
-          <p className="muted small">
-            Разведка даёт до +15% к силе группы и сужает прогноз. {st.recon < 50 ? 'Условия опорного пункта раскрываются с 50%.' : ''}
-          </p>
-          <div className="spec">
-            <span>Контроль сектора</span>
-            <b>{st.control}%</b>
-          </div>
-          <Bar value={st.control} tone="olive" />
-          <h3>Задания</h3>
+          {st.recon < 100 && (
+            <p className="muted small">
+              <Icon name="sparkle" size={14} /> Каждый процент разведки — плюс к силе группы (до +15%) и точнее прогноз.
+            </p>
+          )}
+          <h3>Что можно сделать</h3>
           {SECTOR_MISSIONS[s.type].map((m) => {
             const def = MISSIONS[m];
             const locked = st.recon < def.minRecon;
             return (
-              <div key={m} className="mission">
-                <div className="between">
-                  <b>{def.name}</b>
-                  <span className="muted small">~{fmtLong(s.baseTime * def.timeMul)}</span>
+              <div key={m} className={`mission-card m-${m} ${locked ? 'locked' : ''}`}>
+                <div className="mission-icon">
+                  <Icon name={MISSION_ICON[m]} size={28} />
                 </div>
-                <p className="muted small">{def.desc}</p>
-                <div className="between">
-                  <span className="small">
-                    Награда: <RewardLine cost={missionRewards(m, s.difficulty)} />
-                    {m === 'stronghold' && <span className="amber"> + шанс оснащения</span>}
-                  </span>
+                <div className="mission-body">
+                  <div className="between">
+                    <b>{def.name}</b>
+                    <span className="time-chip">
+                      <Icon name="clock" size={14} /> ~{fmtLong(s.baseTime * def.timeMul)}
+                    </span>
+                  </div>
+                  <p className="small">{MISSION_LORE[m].brief}</p>
+                  <div className="small">
+                    <RewardLine cost={missionRewards(m, s.difficulty)} />
+                    {m === 'stronghold' && (
+                      <span className="pill gold small">
+                        <Icon name="gift" size={13} /> шанс оснащения
+                      </span>
+                    )}
+                  </div>
+                  <Button small disabled={locked} why={locked ? `Нужна разведанность ${def.minRecon}% — сейчас ${st.recon}%` : ''} onClick={() => setMission(m)}>
+                    <Icon name="squad" size={16} /> Собрать группу
+                  </Button>
                 </div>
-                <Button
-                  small
-                  disabled={locked}
-                  why={locked ? `Нужна разведанность от ${def.minRecon}% (сейчас ${st.recon}%)` : ''}
-                  onClick={() => setMission(m)}
-                >
-                  Собрать группу
-                </Button>
               </div>
             );
           })}
@@ -231,6 +208,20 @@ function autoGroup(mission: MissionType, avail: Record<OperatorType, number>, ca
   return g;
 }
 
+function OutcomeMeter({ low, high }: { low: string; high: string }) {
+  const li = OUTCOME_ORDER.indexOf(low as never);
+  const hi = OUTCOME_ORDER.indexOf(high as never);
+  return (
+    <div className="outcome-meter" aria-label={`Прогноз: от ${OUTCOME_NAMES[low as 'fail']} до ${OUTCOME_NAMES[high as 'fail']}`}>
+      {OUTCOME_ORDER.map((o, i) => (
+        <span key={o} className={`seg-o o-${o} ${i >= li && i <= hi ? 'in' : ''}`}>
+          {OUTCOME_NAMES[o].replace('Задание не выполнено', 'Провал')}
+        </span>
+      ))}
+    </div>
+  );
+}
+
 function GroupBuilder({ sector, mission, onBack, onClose }: { sector: SectorDef; mission: MissionType; onBack: () => void; onClose: () => void }) {
   const { state, act, go } = useGame();
   const affordable = useAffordable();
@@ -241,14 +232,11 @@ function GroupBuilder({ sector, mission, onBack, onClose }: { sector: SectorDef;
   const avail = Object.fromEntries(OPERATOR_TYPES.map((t) => [t, state.operators[t].available])) as Record<OperatorType, number>;
   const ranks = Object.fromEntries(OPERATOR_TYPES.map((t) => [t, state.operators[t].rank])) as Record<OperatorType, number>;
   const vLevel = vehicle ? state.vehicles[vehicle]!.level : 1;
-  const capFor = (v?: VehicleType) => planExpedition({
-    sector, mission, group: {}, ranks, vehicle: { type: v ?? 'moto', level: v ? state.vehicles[v]!.level : 1 }, equipment: [], skills: state.commander.skills,
-    commsLevel: state.buildings.comms, sectorRecon: st.recon,
-  }).capacity;
+  const capFor = (v?: VehicleType) =>
+    planExpedition({ sector, mission, group: {}, ranks, vehicle: { type: v ?? 'moto', level: v ? state.vehicles[v]!.level : 1 }, equipment: [], skills: state.commander.skills, commsLevel: state.buildings.comms, sectorRecon: st.recon }).capacity;
   const [group, setGroup] = useState<Group>(() => autoGroup(mission, avail, capFor(preferred)));
   const readyEq = state.equipment.filter((e) => e.status === 'ready');
   const [eqIds, setEqIds] = useState<number[]>(() => {
-    // по умолчанию — лучшие подходящие предметы разных типов
     const pick: number[] = [];
     const want = mission === 'recon' ? ['commkit', 'repairkit', 'reb'] : ['nsu', 'reb', 'repairkit', 'commkit'];
     for (const t of want) {
@@ -266,10 +254,10 @@ function GroupBuilder({ sector, mission, onBack, onClose }: { sector: SectorDef;
   const slotsFree = state.expeditions.length < state.slots;
 
   let why = '';
-  if (!slotsFree) why = 'Все слоты походов заняты — дождитесь возвращения группы';
-  else if (!vehicle) why = 'Нет готового транспорта (в походе, в ремонте или в мастерской)';
+  if (!slotsFree) why = 'Все группы в поле — дождитесь возвращения';
+  else if (!vehicle) why = 'Нет свободного транспорта: он в походе, в ремонте или в мастерской';
   else if (size < 1) why = 'Добавьте хотя бы одного оператора';
-  else if (plan && size > plan.capacity) why = `Вместимость группы — ${plan.capacity}`;
+  else if (plan && size > plan.capacity) why = `В транспорт помещается ${plan.capacity}`;
   else if (plan && !affordable(plan.cost)) why = 'Не хватает ресурсов на поход';
 
   const toggleEq = (id: number) => {
@@ -280,108 +268,130 @@ function GroupBuilder({ sector, mission, onBack, onClose }: { sector: SectorDef;
       return [...withoutSameType, id].slice(-MAX_EQUIPMENT_PER_GROUP);
     });
   };
-  const busyOps = OPERATOR_TYPES.reduce((s, t) => s + state.operators[t].on_mission, 0);
 
   return (
-    <Sheet title={`${MISSIONS[mission].name} · сектор ${pad2(sector.id)}`} onClose={onClose} wide>
+    <Sheet title={`${MISSIONS[mission].name}: ${sector.name}`} onClose={onClose} wide>
       <button className="link" onClick={onBack}>
-        ← к сектору
+        <Icon name="back" size={16} /> к сектору
       </button>
+      <div className="brief">
+        <Icon name={MISSION_ICON[mission]} size={30} />
+        <p>
+          <b>Задача:</b> {MISSION_LORE[mission].verb} сектор «{sector.name}». {MISSION_LORE[mission].brief}
+        </p>
+      </div>
+
       <h3>
-        Операторы · {size}/{plan?.capacity ?? '—'}
+        <Icon name="squad" size={18} /> Группа · {size} из {plan?.capacity ?? '—'} мест
       </h3>
-      {busyOps > 0 && <p className="muted small">В походе: {busyOps} — они вернутся после завершения своих заданий.</p>}
-      {OPERATOR_TYPES.map((t) => {
-        const total = state.operators[t].available;
-        if (!total && !state.operators[t].on_mission && !state.operators[t].wounded) return null;
-        return (
-          <div key={t} className="pick-row">
-            <span>
-              <b>{OPERATORS[t].name}</b>
-              <small className="muted">
-                свободно {total}
-                {state.operators[t].on_mission ? ` · в походе ${state.operators[t].on_mission}` : ''}
-                {state.operators[t].wounded ? ` · ранены ${state.operators[t].wounded}` : ''}
-              </small>
-            </span>
-            <StepperInline value={group[t] ?? 0} max={total} onChange={(v) => setGroup((g) => ({ ...g, [t]: v }))} label={OPERATORS[t].name} />
-          </div>
-        );
-      })}
+      <div className="seats" aria-hidden>
+        {Array.from({ length: plan?.capacity ?? 4 }, (_, i) => (
+          <i key={i} className={i < size ? 'on' : ''} />
+        ))}
+      </div>
+      <div className="pick-list">
+        {OPERATOR_TYPES.map((t) => {
+          const o = state.operators[t];
+          if (!o.available && !o.on_mission && !o.wounded) return null;
+          return (
+            <div key={t} className={`pick-card ${(group[t] ?? 0) > 0 ? 'on' : ''}`}>
+              <Portrait sprite={OPERATORS[t].sprite} size={52} />
+              <span className="pick-info">
+                <b>{OPERATORS[t].name}</b>
+                <small className="muted">
+                  свободно {o.available}
+                  {o.on_mission ? ` · в поле ${o.on_mission}` : ''}
+                  {o.wounded ? ` · ранены ${o.wounded}` : ''}
+                </small>
+              </span>
+              <Stepper value={group[t] ?? 0} max={o.available} onChange={(v) => setGroup((g) => ({ ...g, [t]: v }))} label={OPERATORS[t].name} />
+            </div>
+          );
+        })}
+      </div>
       <button className="link" onClick={() => setGroup(autoGroup(mission, avail, plan?.capacity ?? 4))}>
-        подобрать состав автоматически
+        <Icon name="sparkle" size={15} /> подобрать состав за меня
       </button>
 
-      <h3>Транспорт · один на группу</h3>
-      <div className="chips">
+      <h3>
+        <Icon name="bukhanka" size={18} /> Транспорт
+      </h3>
+      <div className="veh-pick">
         {VEHICLE_TYPES.map((v) => {
           const row = state.vehicles[v];
           if (!row) return null;
           const ok = row.status === 'ready';
           return (
-            <button
-              key={v}
-              className={`chip ${vehicle === v ? 'on' : ''}`}
-              disabled={!ok}
-              onClick={() => {
-                setVehicle(v);
-              }}
-            >
+            <button key={v} className={`veh-card ${vehicle === v ? 'on' : ''}`} disabled={!ok} onClick={() => setVehicle(v)}>
+              <Sprite img="vehicles" index={VEHICLES[v].sprite} className="veh-img" focusY={62} />
               <b>{VEHICLES[v].name}</b>
-              <small>{ok ? vehicleBonusText(v, row.level) : row.status === 'mission' ? 'в походе' : row.status === 'damaged' ? 'нужен ремонт' : 'в мастерской'}</small>
+              <small>{ok ? vehicleBonusText(v, row.level) : row.status === 'mission' ? 'в походе' : row.status === 'damaged' ? 'сломан' : 'в мастерской'}</small>
             </button>
           );
         })}
       </div>
 
-      <h3>Оснащение · до {MAX_EQUIPMENT_PER_GROUP}, разных типов</h3>
+      <h3>
+        <Icon name="repairkit" size={18} /> Оснащение · до {MAX_EQUIPMENT_PER_GROUP}
+      </h3>
       {readyEq.length ? (
-        <div className="chips">
+        <div className="eq-pick">
           {readyEq.map((e) => (
-            <button key={e.id} className={`chip ${eqIds.includes(e.id) ? 'on' : ''}`} onClick={() => toggleEq(e.id)}>
-              <b>
-                {EQUIPMENT[e.type].icon} {EQUIPMENT[e.type].name}
-              </b>
-              <small>
-                {RARITY_NAMES[e.rarity]} · ур. {e.level} · {equipmentEffectText(e.type, e.rarity, e.level)}
-              </small>
+            <button key={e.id} className={`eq-chip rarity-${e.rarity} ${eqIds.includes(e.id) ? 'on' : ''}`} onClick={() => toggleEq(e.id)}>
+              <span className="eq-icon small"><Icon name={e.type} size={20} /></span>
+              <span>
+                <b>{EQUIPMENT[e.type].name}</b>
+                <small>
+                  {RARITY_NAMES[e.rarity]} {e.level} ур. · {equipmentEffectText(e.type, e.rarity, e.level)}
+                </small>
+              </span>
+              {eqIds.includes(e.id) && <Icon name="check" size={18} className="tick" />}
             </button>
           ))}
         </div>
       ) : (
-        <p className="muted small">Свободного оснащения нет. Его собирают в мастерской и получают в походах.</p>
+        <Speech who="batya" compact>Оснащения на складе нет. Загляни в мастерскую — соберу.</Speech>
       )}
 
       {plan && (
         <div className="forecast">
-          <h3>Прогноз</h3>
-          <div className="spec">
-            <span>Исход</span>
-            <b className={plan.outcomeHigh === 'fail' ? 'red' : plan.outcomeLow === 'fail' ? 'amber' : 'olive'}>{outcomeRangeText(plan.outcomeLow, plan.outcomeHigh, OUTCOME_NAMES)}</b>
-          </div>
-          <div className="spec">
-            <span>Риск существенных потерь</span>
-            <b className={plan.lossCategory === 'высокая' ? 'red' : plan.lossCategory === 'средняя' ? 'amber' : 'olive'}>{plan.lossCategory}</b>
-          </div>
-          <div className="spec">
-            <span>{MISSIONS[mission].combat ? 'Боевой рейтинг' : 'Разведка'} / противник</span>
-            <span className="num">
-              {MISSIONS[mission].combat ? plan.power : plan.reconScore} / ~{plan.enemy} (±{Math.round(plan.uncertainty * 100)}%)
+          <div className="between">
+            <h3>
+              <Icon name="compass" size={18} /> Прогноз штаба
+            </h3>
+            <span className={`risk r-${plan.lossCategory}`}>
+              <Icon name="heart" size={14} /> риск {plan.lossCategory}
             </span>
           </div>
-          <div className="spec">
-            <span>Награда</span>
-            <span>
-              <RewardLine cost={plan.rewardsLow} /> … <RewardLine cost={plan.rewardsHigh} />
-            </span>
+          <OutcomeMeter low={plan.outcomeLow} high={plan.outcomeHigh} />
+          <div className="vs">
+            <div>
+              <span className="muted tiny">{MISSIONS[mission].combat ? 'Наша сила' : 'Наша разведка'}</span>
+              <b>{MISSIONS[mission].combat ? plan.power : plan.reconScore}</b>
+            </div>
+            <span className="vs-x">против</span>
+            <div>
+              <span className="muted tiny">Противник</span>
+              <b>
+                ~{plan.enemy} <small>±{Math.round(plan.uncertainty * 100)}%</small>
+              </b>
+            </div>
           </div>
-          <div className="spec">
-            <span>Время</span>
-            <b>{fmtLong(plan.duration)}</b>
-          </div>
-          <div className="spec">
-            <span>Расход</span>
-            <CostLine cost={plan.cost} />
+          <div className="fc-grid">
+            <div>
+              <span className="muted tiny">Добыча</span>
+              <RewardLine cost={plan.rewardsHigh} />
+            </div>
+            <div>
+              <span className="muted tiny">Расход</span>
+              <CostLine cost={plan.cost} />
+            </div>
+            <div>
+              <span className="muted tiny">В пути</span>
+              <b>
+                <Icon name="clock" size={14} /> {fmtLong(plan.duration)}
+              </b>
+            </div>
           </div>
           {plan.reasons.length > 0 && (
             <ul className="reasons">
@@ -392,41 +402,21 @@ function GroupBuilder({ sector, mission, onBack, onClose }: { sector: SectorDef;
               ))}
             </ul>
           )}
-          <p className="muted tiny">Прогноз — диапазон, а не гарантия. Точный итог фиксируется при отправке и раскрывается в отчёте.</p>
+          <p className="muted tiny">Это оценка, а не обещание: точный итог решится в поле и придёт в отчёте.</p>
         </div>
       )}
       {plan && !affordable(plan.cost) && (plan.cost.fuel ?? 0) > 0 && (
-        <div className="warn-box">
-          Не хватает ресурсов. Топливо производит{' '}
+        <Speech who="batya" compact>
+          Баки пустые! Топливо даёт{' '}
           <button className="link" onClick={() => { onClose(); go('base', 'fueldepot'); }}>
             склад ГСМ
           </button>
-          , его также приносят задания «Снабжение».
-        </div>
+          , а ещё его можно отбить заданием «Снабжение».
+        </Speech>
       )}
-      <Button
-        disabled={!!why}
-        why={why}
-        onClick={async () => {
-          if (await act('dispatch', { sectorId: sector.id, mission, group, vehicle, equipment: eqIds })) onClose();
-        }}
-      >
-        Отправить группу
+      <Button disabled={!!why} why={why} onClick={async () => { if (await act('dispatch', { sectorId: sector.id, mission, group, vehicle, equipment: eqIds })) onClose(); }}>
+        <Icon name="flag" size={18} /> Отправить группу
       </Button>
     </Sheet>
-  );
-}
-
-function StepperInline(p: { value: number; max: number; onChange: (v: number) => void; label: string }) {
-  return (
-    <div className="stepper" aria-label={p.label}>
-      <button type="button" disabled={p.value <= 0} onClick={() => p.onChange(p.value - 1)} aria-label={`Меньше: ${p.label}`}>
-        −
-      </button>
-      <b className="num">{p.value}</b>
-      <button type="button" disabled={p.value >= p.max} onClick={() => p.onChange(p.value + 1)} aria-label={`Больше: ${p.label}`}>
-        +
-      </button>
-    </div>
   );
 }

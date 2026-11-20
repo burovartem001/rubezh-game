@@ -1,5 +1,8 @@
 import React, { useState } from 'react';
 import { api } from '../api';
+import { CAST, CastKey } from '../../../shared/lore';
+import { Drone, Portrait } from '../art/art';
+import { Icon } from '../art/icons';
 
 export function AuthScreen({ onToken }: { onToken: (t: string) => void }) {
   const [mode, setMode] = useState<'login' | 'register'>('register');
@@ -30,6 +33,21 @@ export function AuthScreen({ onToken }: { onToken: (t: string) => void }) {
         <span className="kicker">Браузерная стратегия</span>
         <h1>РУБЕЖ</h1>
         <p>Тыловой полигон. Взвод БПЛА. Походы на карту секторов.</p>
+        <Drone className="flyby" size={64} />
+      </div>
+      <div className="cast-row" aria-label="Команда полигона">
+        {(Object.keys(CAST) as CastKey[]).map((k) => (
+          <div key={k} className="cast-item">
+            <Portrait sprite={CAST[k].sprite} size={58} />
+            <b style={{ color: CAST[k].color }}>{CAST[k].name}</b>
+            <small>{CAST[k].role}</small>
+          </div>
+        ))}
+      </div>
+      <div className="feature-row">
+        <span><Icon name="base" size={18} /> строй полигон</span>
+        <span><Icon name="squad" size={18} /> собирай отряд</span>
+        <span><Icon name="map" size={18} /> отправляй походы</span>
       </div>
       <form className="panel auth-form" onSubmit={submit}>
         <div className="seg" role="tablist">
@@ -62,7 +80,7 @@ export function AuthScreen({ onToken }: { onToken: (t: string) => void }) {
         )}
         {err && <div className="error">{err}</div>}
         <button className="btn primary" disabled={busy}>
-          {busy ? 'Связь…' : mode === 'login' ? 'Войти' : 'Принять командование'}
+          {busy ? 'Связь…' : mode === 'login' ? 'Вернуться на полигон' : 'Принять командование'}
         </button>
         <p className="muted tiny">Игровой мир, карта, стороны и характеристики техники вымышлены и условны.</p>
       </form>
