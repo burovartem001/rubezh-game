@@ -78,7 +78,7 @@ $env:TEST_URL="http://localhost:3000"; npm run test:api   # полный пер�
 
 1. New Project → Deploy PostgreSQL.
 2. В том же проекте: New → GitHub Repo → этот репозиторий. Сборка и запуск описаны в `railway.json`
-   (`npm ci && npm run build`, старт `npm start`, проверка `/api/health`).
+   (`npm ci --include=dev && npm run build`, старт `npm start`, проверка `/api/health`).
 3. Переменные сервиса rubezh:
    - `DATABASE_URL` = `${{Postgres.DATABASE_URL}}` (ссылка на внутренний адрес базы);
    - при необходимости `FRAME_ANCESTORS`, `BASE_PATH` (см. ниже).
