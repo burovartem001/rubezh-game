@@ -10,7 +10,8 @@ import { Icon } from '../art/icons';
 import { RankBadge, Speech } from '../art/art';
 import { Chevron } from '../art/Chevron';
 import { chevronByKey } from '../../../shared/chevrons';
-import { ChevronsTab, MatesTab, chevronColor } from './Mates';
+import { ChevronsTab, MatesTab, ProfileSheet, chevronColor } from './Mates';
+import { CompanyTab, PrestigePanel, SiteLinkPanel } from './Long';
 
 const BRANCH_DESC: Record<Branch, { text: string; icon: string }> = {
   command: { text: 'Больше бойцов в группе, меньше потерь, лишний поход одновременно.', icon: 'commander' },
@@ -25,7 +26,7 @@ const STATS: [string, string, string][] = [
   ['lostTotal', 'skull', 'потеряно'],
 ];
 
-type CmdTab = 'profile' | 'chevrons' | 'mates';
+type CmdTab = 'profile' | 'chevrons' | 'mates' | 'company';
 
 export function CommanderScreen() {
   const { state } = useGame();
@@ -34,7 +35,9 @@ export function CommanderScreen() {
     ['profile', 'Профиль', 'commander', ''],
     ['chevrons', 'Шевроны', 'medal', state.chevrons.length],
     ['mates', 'Сослуживцы', 'squad', ''],
+    ['company', 'Рота', 'stronghold', ''],
   ];
+  const [openPlayer, setOpenPlayer] = useState<number | null>(null);
   return (
     <>
       <div className="seg big icons" role="tablist">
@@ -49,6 +52,8 @@ export function CommanderScreen() {
       {tab === 'profile' && <ProfileTab onChevrons={() => setTab('chevrons')} />}
       {tab === 'chevrons' && <ChevronsTab />}
       {tab === 'mates' && <MatesTab />}
+      {tab === 'company' && <CompanyTab onOpenPlayer={setOpenPlayer} />}
+      {openPlayer != null && <ProfileSheet id={openPlayer} onClose={() => setOpenPlayer(null)} />}
     </>
   );
 }
@@ -179,6 +184,8 @@ function ProfileTab({ onChevrons }: { onChevrons: () => void }) {
       </section>
 
       <AwardsShowcase />
+      <PrestigePanel />
+      <SiteLinkPanel />
 
       <section className="panel">
         <h2>

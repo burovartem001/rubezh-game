@@ -47,6 +47,7 @@ import {
   VETERAN_BONUS,
   equipmentKindValue,
 } from './config.js';
+import { Mods, emptyMods, addMods } from './progression.js';
 
 export type Group = Partial<Record<OperatorType, number>>;
 export interface EquipLite {
@@ -65,6 +66,10 @@ export interface PlanInput {
   skills: Skills;
   commsLevel: number;
   sectorRecon: number;
+  /** Пассивные бонусы: исследования, престиж, комплекты, сезон, обстановка, именные бойцы. */
+  bonus?: { mods: Partial<Mods>; reasons: Reason[] };
+  /** Для набега: сила обороны чужого полигона и добыча вместо наград сектора. */
+  override?: { enemy?: number; rewards?: Cost };
 }
 export interface Reason {
   text: string;
@@ -96,6 +101,7 @@ export interface Plan {
   lossMul: number;
   fieldRecovery: number;
   damageReduce: number;
+  permLossMul: number;
 }
 
 const pct = (x: number) => `${Math.round(x * 100)}%`;
@@ -107,8 +113,8 @@ export function groupCapacity(vehicle: { type: VehicleType; level: number }, ski
   return BASE_GROUP_CAPACITY + vehicleBonus(vehicle.type, vehicle.level).capacity + (skills.cohesion ?? 0) * SKILL_EFFECTS.cohesion;
 }
 /** Эффект заданного вида от оснащения группы и названия предметов, которые его дают. */
-function equipKind(eq: EquipLite[], kind: EquipKind): { v: number; names: string } {
-  const v = equipmentKindValue(eq, kind);
+function equipKind(eq: EquipLite[], kind: EquipKind, mul = 1): { v: number; names: string } {
+  const v = equipmentKindValue(eq, kind) * Math.max(0, mul);
   const names = eq.filter((e) => EQUIPMENT[e.type].kind === kind || EQUIPMENT[e.type].extra?.kind === kind).map((e) => EQUIPMENT[e.type].name).join(' и ');
   return { v, names };
 }
@@ -126,16 +132,19 @@ export function planExpedition(inp: PlanInput): Plan {
   const size = groupSize(group);
   const capacity = groupCapacity(vehicle, skills);
   const vName = VEHICLES[vehicle.type].name;
+  const M: Mods = addMods(emptyMods(), inp.bonus?.mods ?? {});
+  for (const r of inp.bonus?.reasons ?? []) reasons.push(r);
+  const eqMul = 1 + M.equip;
 
   // Длительность
-  let duration = sector.baseTime * m.timeMul * vb.timeMul;
+  let duration = sector.baseTime * m.timeMul * vb.timeMul * Math.max(0.3, 1 - M.time);
   if (vb.timeMul < 1) reasons.push({ text: `${vName}: время похода −${pct(1 - vb.timeMul)}`, kind: 'bonus' });
   if (vb.timeMul > 1) reasons.push({ text: `${vName}: время похода +${pct(vb.timeMul - 1)}`, kind: 'malus' });
   duration = Math.max(20, Math.round(duration));
 
   // Стоимость
   const economy = (skills.economy ?? 0) * SKILL_EFFECTS.economy;
-  const fuel = Math.max(1, Math.round(sector.fuel * m.fuelMul * vb.fuelMul * (1 - economy)));
+  const fuel = Math.max(1, Math.round(sector.fuel * m.fuelMul * vb.fuelMul * (1 - economy) * Math.max(0.2, 1 - M.fuel)));
   let supplies = 0;
   for (const t of OPERATOR_TYPES) supplies += (group[t] ?? 0) * OPERATORS[t].upkeep;
   supplies = Math.round(supplies * (1 - economy));
@@ -144,7 +153,7 @@ export function planExpedition(inp: PlanInput): Plan {
   if (economy) reasons.push({ text: `Командир, «Экономия»: топливо и припасы −${pct(economy)}`, kind: 'bonus' });
 
   // Боевая сила
-  const fpvEq = equipKind(equipment, 'fpv');
+  const fpvEq = equipKind(equipment, 'fpv', eqMul);
   const nsu = fpvEq.v;
   let power = 0;
   let reconScore = 0;
@@ -178,11 +187,12 @@ export function planExpedition(inp: PlanInput): Plan {
       reasons.push({ text: `«Баба-яга»: +${pct(b)} в длительном походе или особой цели`, kind: 'bonus' });
     }
   }
-  const powerEq = equipKind(equipment, 'power');
+  const powerEq = equipKind(equipment, 'power', eqMul);
   if (powerEq.v) {
     powerMul += powerEq.v;
     reasons.push({ text: `${powerEq.names}: +${pct(powerEq.v)} к силе группы`, kind: 'bonus' });
   }
+  powerMul += M.power;
   const reconK = (inp.sectorRecon / 100) * RECON_POWER_BONUS;
   if (reconK > 0) {
     powerMul += reconK;
@@ -197,9 +207,9 @@ export function planExpedition(inp: PlanInput): Plan {
 
   // Разведка
   const commsK = Math.max(0, inp.commsLevel - 1) * COMMS_RECON_PER_LEVEL;
-  const reconEq = equipKind(equipment, 'recon');
+  const reconEq = equipKind(equipment, 'recon', eqMul);
   const commkit = reconEq.v;
-  const reconMul = 1 + vb.reconBonus + commsK + commkit;
+  const reconMul = Math.max(0.2, 1 + vb.reconBonus + commsK + commkit + M.recon);
   reconScore *= reconMul;
   if (vb.reconBonus) reasons.push({ text: `${vName}: разведка +${pct(vb.reconBonus)}`, kind: 'bonus' });
   if (commsK) reasons.push({ text: `Узел связи: разведка и данные +${pct(commsK)}`, kind: 'bonus' });
@@ -209,46 +219,46 @@ export function planExpedition(inp: PlanInput): Plan {
   let enemy: number;
   let effective: number;
   if (m.combat) {
-    enemy = enemyPower(sector.difficulty) * m.enemyMul;
+    enemy = inp.override?.enemy ?? enemyPower(sector.difficulty) * m.enemyMul;
     effective = power;
   } else {
     enemy = detection(sector.difficulty);
     effective = reconScore + power * 0.15;
   }
   const obs = (skills.observation ?? 0) * SKILL_EFFECTS.observation;
-  const uncertainty = Math.max(0.03, 0.4 * (1 - inp.sectorRecon / 100) * (1 - Math.min(0.8, commkit * 2)) * (1 - obs));
+  const uncertainty = Math.min(0.6, Math.max(0.03, 0.4 * (1 - inp.sectorRecon / 100) * (1 - Math.min(0.8, commkit * 2)) * (1 - obs) * (1 - Math.min(0.8, M.uncertainty))));
   const ratioMid = effective / enemy;
   const ratioLow = (effective * (1 - RANDOM_SPREAD)) / (enemy * (1 + uncertainty));
   const ratioHigh = (effective * (1 + RANDOM_SPREAD)) / (enemy * (1 - uncertainty));
 
   // Потери
-  const lossEq = equipKind(equipment, 'losses');
+  const lossEq = equipKind(equipment, 'losses', eqMul);
   const reb = lossEq.v;
   const vets = group.veteran ?? 0;
   const vetK = Math.min(VETERAN_BONUS.max, VETERAN_BONUS.perUnit * vets);
   const resil = (skills.resilience ?? 0) * SKILL_EFFECTS.resilience;
-  const lossMul = m.lossMul * (1 - reb) * (1 - resil) * (1 - vetK);
+  const lossMul = m.lossMul * (1 - reb) * (1 - resil) * (1 - vetK) * Math.max(0.2, 1 - M.losses);
   if (reb) reasons.push({ text: `${lossEq.names}: расчётные потери −${pct(reb)}`, kind: 'bonus' });
   if (vetK) reasons.push({ text: `Бывшие штурмовики (${vets}): опыт бережёт группу, потери −${pct(vetK)}`, kind: 'bonus' });
   if (resil) reasons.push({ text: `Командир, «Устойчивость»: потери −${pct(resil)}`, kind: 'bonus' });
   const lossRate = baseLossRate(ratioMid) * lossMul;
-  const fieldEq = equipKind(equipment, 'field');
-  const fieldRecovery = Math.min(0.85, fieldEq.v);
+  const fieldEq = equipKind(equipment, 'field', eqMul);
+  const fieldRecovery = Math.min(0.85, fieldEq.v + Math.max(0, M.field));
   if (fieldRecovery) reasons.push({ text: `${fieldEq.names}: ${pct(fieldRecovery)} раненых восстанавливается в поле`, kind: 'bonus' });
 
   // Награды
   const trophies = (skills.trophies ?? 0) * SKILL_EFFECTS.trophies;
-  const rewardMul = sector.rewardMul * (1 + vb.lootBonus + trophies);
+  const rewardMul = sector.rewardMul * (1 + vb.lootBonus + trophies) * Math.max(0.2, 1 + M.rewards);
   if (vb.lootBonus) reasons.push({ text: `${vName}: объём добычи +${pct(vb.lootBonus)}`, kind: 'bonus' });
   if (trophies) reasons.push({ text: `Командир, «Трофеи»: награды +${pct(trophies)}`, kind: 'bonus' });
   const analytics = (skills.analytics ?? 0) * SKILL_EFFECTS.analytics;
-  const dataMul = sector.rewardMul * (1 + commsK + commkit + analytics) * (1 + trophies);
+  const dataMul = sector.rewardMul * (1 + commsK + commkit + analytics) * (1 + trophies) * Math.max(0.2, 1 + M.rewards + M.data);
   if (analytics) reasons.push({ text: `Командир, «Аналитика»: данные +${pct(analytics)}`, kind: 'bonus' });
   const reconGainMul = 1 + obs + vb.reconBonus + commkit;
 
   const outcomeLow = outcomeFor(ratioLow);
   const outcomeHigh = outcomeFor(ratioHigh);
-  const base = missionRewards(mission, sector.difficulty);
+  const base = inp.override?.rewards ?? missionRewards(mission, sector.difficulty);
   const rewardsFor = (o: Outcome) => {
     const r = scaleCost(base, rewardMul * OUTCOME_REWARD_MUL[o]);
     if (r.data) r.data = Math.round((base.data ?? 0) * OUTCOME_REWARD_MUL[o] * dataMul);
@@ -280,6 +290,7 @@ export function planExpedition(inp: PlanInput): Plan {
     lossMul,
     fieldRecovery,
     damageReduce: fieldRecovery,
+    permLossMul: Math.max(0, 1 - M.permLoss),
   };
 }
 
@@ -361,7 +372,7 @@ export function resolveExpedition(inp: PlanInput, plan: Plan, seed: number): Exp
     hit.push(pool.splice(idx, 1)[0]);
   }
   let permanent = 0;
-  if (!early && (outcome === 'fail' || outcome === 'partial') && hit.length) permanent = Math.floor(hit.length * PERMANENT_LOSS_SHARE + rand() * 0.5);
+  if (!early && (outcome === 'fail' || outcome === 'partial') && hit.length) permanent = Math.floor(hit.length * PERMANENT_LOSS_SHARE * (plan.permLossMul ?? 1) + rand() * 0.5);
   let totalWounded = 0, totalLost = 0, totalField = 0;
   hit.forEach((t, i) => {
     const c = (casualties[t] ??= { wounded: 0, lost: 0, fieldRecovered: 0 });
@@ -388,7 +399,7 @@ export function resolveExpedition(inp: PlanInput, plan: Plan, seed: number): Exp
   if (vehicleDamaged) reasons.push({ text: `${VEHICLES[inp.vehicle.type].name} повреждён — нужен ремонт в мастерской`, kind: 'malus' });
 
   // Награды
-  const base = missionRewards(inp.mission, d);
+  const base = inp.override?.rewards ?? missionRewards(inp.mission, d);
   const rewards: Cost = {};
   for (const r of RES_KEYS) {
     if (!base[r]) continue;

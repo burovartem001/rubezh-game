@@ -6,6 +6,7 @@ import { Countdown, JobProgress, Sheet, fmtDur, pad2 } from '../ui';
 import { Icon, MISSION_ICON } from '../art/icons';
 import { Speech } from '../art/art';
 import { EMPTY } from '../../../shared/lore';
+import { RESEARCH } from '../../../shared/progression';
 
 export function jobTitle(j: Job): string {
   const p = j.payload;
@@ -17,6 +18,7 @@ export function jobTitle(j: Job): string {
     case 'vehicle_acquire': return `${VEHICLES[p.type as keyof typeof VEHICLES].name}: подготовка`;
     case 'vehicle_upgrade': return `${VEHICLES[p.type as keyof typeof VEHICLES].name} → ур. ${p.toLevel}`;
     case 'vehicle_repair': return `${VEHICLES[p.type as keyof typeof VEHICLES].name}: ремонт`;
+    case 'research': return `Исследование: ${RESEARCH.find((r) => r.key === p.key)?.name ?? p.key}`;
     case 'craft': return `${EQUIPMENT[p.type as keyof typeof EQUIPMENT].name} (${RARITY_NAMES[p.rarity as keyof typeof RARITY_NAMES].toLowerCase()})`;
     default: return j.kind;
   }
@@ -27,12 +29,13 @@ export function jobIcon(j: Job): string {
     case 'build': return p.building;
     case 'train': case 'rank': return p.type;
     case 'recover': return 'cross';
+    case 'research': return 'data';
     case 'craft': return p.type;
     default: return p.type ?? 'wrench';
   }
 }
-const QUEUE_ICON: Record<Job['queue'], string> = { build: 'hq', train: 'training', workshop: 'workshop', recovery: 'cross' };
-export const QUEUE_NAMES: Record<Job['queue'], string> = { build: 'Строительство', train: 'Подготовка', workshop: 'Мастерская', recovery: 'Восстановление' };
+const QUEUE_ICON: Record<Job['queue'], string> = { build: 'hq', train: 'training', workshop: 'workshop', recovery: 'cross', research: 'data' };
+export const QUEUE_NAMES: Record<Job['queue'], string> = { build: 'Строительство', train: 'Подготовка', workshop: 'Мастерская', recovery: 'Восстановление', research: 'Исследования' };
 
 export function expeditionPhase(x: Expedition, now: number) {
   const f = (now - x.startAt) / (x.endAt - x.startAt);
@@ -49,7 +52,7 @@ export function activeTimers(state: GameState, now: number) {
 
 export function ExpeditionRow({ x }: { x: Expedition }) {
   const { now } = useGame();
-  const s = sectorById(x.sectorId)!;
+  const s = sectorById(x.sectorId) ?? { id: 0, name: 'чужой полигон' };
   const ph = expeditionPhase(x, now);
   const n = Object.values(x.group).reduce((a, b) => a + (b ?? 0), 0);
   return (
@@ -96,7 +99,7 @@ export function JobRow({ j }: { j: Job }) {
 
 export function QueuesSheet({ onClose }: { onClose: () => void }) {
   const { state } = useGame();
-  const queues: Job['queue'][] = ['build', 'train', 'workshop', 'recovery'];
+  const queues: Job['queue'][] = ['build', 'train', 'workshop', 'recovery', 'research'];
   return (
     <Sheet title="Очереди и походы" onClose={onClose}>
       <h3>

@@ -8,6 +8,7 @@ import { Bar, Button, Countdown, CostLine, JobProgress, RewardLine, Sheet, fmtLo
 import { ExpeditionRow, JobRow } from '../components/Queues';
 import { Icon } from '../art/icons';
 import { BUILDING_SPOTS, BuildingArt, Drone, Ring, Speech } from '../art/art';
+import { HqPanels, ResearchSheet } from './Long';
 
 const LINKS: Partial<Record<BuildingKey, { tab: 'squad' | 'map'; focus?: string; text: string; icon: string }>> = {
   training: { tab: 'squad', focus: 'operators', text: 'К подготовке операторов', icon: 'squad' },
@@ -16,6 +17,7 @@ const LINKS: Partial<Record<BuildingKey, { tab: 'squad' | 'map'; focus?: string;
   fueldepot: { tab: 'squad', focus: 'vehicles', text: 'В автопарк', icon: 'bukhanka' },
   comms: { tab: 'map', text: 'Открыть карту секторов', icon: 'map' },
 };
+const RESEARCH_LINK: Partial<Record<BuildingKey, boolean>> = { comms: true };
 const DAILY_ICON: Record<DailyKey, string> = { dispatch: 'map', train: 'training', build: 'hq', recon: 'recon' };
 
 export function BaseScreen() {
@@ -118,6 +120,7 @@ export function BaseScreen() {
         </section>
         <Daily />
       </div>
+      <HqPanels />
 
       {open && <BuildingSheet k={open} onClose={() => setOpen(null)} />}
     </>
@@ -163,6 +166,18 @@ function Daily() {
         })}
       </div>
     </section>
+  );
+}
+
+function ResearchButton() {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <button className="btn secondary" onClick={() => setOpen(true)}>
+        <Icon name="data" size={18} /> Исследования
+      </button>
+      {open && <ResearchSheet onClose={() => setOpen(false)} />}
+    </>
   );
 }
 
@@ -239,6 +254,7 @@ function BuildingSheet({ k, onClose }: { k: BuildingKey; onClose: () => void }) 
       <Button disabled={!!why} why={why} onClick={async () => { if (await act('build', { building: k })) onClose(); }}>
         <Icon name="up" size={18} /> {max ? 'Максимальный уровень' : `Улучшить до ${lvl + 1} уровня`}
       </Button>
+      {RESEARCH_LINK[k] && <ResearchButton />}
       {link && (
         <button className="btn secondary" onClick={() => { onClose(); go(link.tab, link.focus); }}>
           <Icon name={link.icon} size={18} /> {link.text}

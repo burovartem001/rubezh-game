@@ -17,10 +17,11 @@ export const CHEVRON_RARITY_COLORS: Record<ChevronRarity, string> = {
   legendary: '#edbb76',
 };
 
-export type ChevronCategory = 'start' | 'game' | 'site';
+export type ChevronCategory = 'start' | 'game' | 'rating' | 'site';
 export const CHEVRON_CATEGORIES: { key: ChevronCategory; name: string; text: string }[] = [
   { key: 'start', name: 'Стартовые', text: 'Выдаются каждому командиру при поступлении на полигон.' },
   { key: 'game', name: 'За достижения в игре', text: 'Открываются сами, когда выполнено условие.' },
+  { key: 'rating', name: 'За рейтинг и сезоны', text: 'Выдаются по итогам недели и сезона лучшим командирам.' },
   { key: 'site', name: 'Возможно получить за особые заслуги на сайте', text: 'Выдаёт сайт «Учёт дронов» — за особые заслуги. Условия появятся позже.' },
 ];
 
@@ -87,6 +88,37 @@ export const CHEVRONS: ChevronDef[] = [
   { key: 'legend', name: 'Легенда рубежа', motto: 'ЛЕГЕНДА', category: 'game', rarity: 'common', shape: 'round', bg: '#5a4520', bg2: '#33260f', border: '#f6dc8a', ink: '#fff6d6', icon: 'star',
     condition: { kind: 'level', value: 10, text: 'Командир 10 уровня' } },
 
+  { key: 'defender', name: 'Стена', motto: 'ОБОРОНА', category: 'game', rarity: 'common', shape: 'shield', bg: '#3a3f46', bg2: '#22262b', border: '#c9cfd6', ink: '#eef1f4', icon: 'reb',
+    condition: { kind: 'stat', key: 'defended', value: 10, text: 'Отбить 10 атак на полигон' } },
+  { key: 'longHaul', name: 'Дальний рейс', motto: 'ЭКСПЕДИЦИЯ', category: 'game', rarity: 'common', shape: 'arch', bg: '#4a3f2a', bg2: '#2d2618', border: '#d9b56a', ink: '#fbefd2', icon: 'compass',
+    condition: { kind: 'stat', key: 'won_expedition', value: 5, text: '5 успешных экспедиций' } },
+  { key: 'scientist', name: 'Учёный совет', motto: 'НАУКА', category: 'game', rarity: 'common', shape: 'hex', bg: '#2a3a4f', bg2: '#18222f', border: '#8fc1c9', ink: '#e4f2f6', icon: 'data',
+    condition: { kind: 'stat', key: 'researchDone', value: 8, text: 'Завершить 8 исследований' } },
+  { key: 'pvpRaider', name: 'Гость без приглашения', motto: 'НАБЕГ', category: 'game', rarity: 'common', shape: 'diamond', bg: '#4f2a2a', bg2: '#2f1818', border: '#e0a08f', ink: '#fbe4dc', icon: 'flag',
+    condition: { kind: 'stat', key: 'pvp_win', value: 5, text: '5 успешных набегов' } },
+  { key: 'goodNeighbor', name: 'Плечо товарища', motto: 'ВЗАИМОПОМОЩЬ', category: 'game', rarity: 'common', shape: 'round', bg: '#2f4a3a', bg2: '#1a2d22', border: '#c7dda6', ink: '#eef6e6', icon: 'squad',
+    condition: { kind: 'stat', key: 'helps', value: 10, text: 'Помочь сослуживцам 10 раз' } },
+  { key: 'companyFounder', name: 'Основатель роты', motto: 'РОТА', category: 'game', rarity: 'common', shape: 'tab', bg: '#3f3a2a', bg2: '#25221a', border: '#e3c98a', ink: '#fbf2d8', icon: 'commander',
+    condition: { kind: 'stat', key: 'companyFounded', value: 1, text: 'Основать роту' } },
+  { key: 'companyVictor', name: 'Штурм удался', motto: 'РОТНЫЙ ШТУРМ', category: 'game', rarity: 'common', shape: 'hex', bg: '#4f3a2a', bg2: '#2f2218', border: '#edbb76', ink: '#fff0d4', icon: 'stronghold',
+    condition: { kind: 'stat', key: 'companyWins', value: 1, text: 'Победить укрепрайон вместе с ротой' } },
+  { key: 'streak7', name: 'Неделя без выходных', motto: '7 ДНЕЙ', category: 'game', rarity: 'common', shape: 'round', bg: '#3a2f4f', bg2: '#221b2f', border: '#c9a6d6', ink: '#f4e8f8', icon: 'clock',
+    condition: { kind: 'stat', key: 'maxStreak', value: 7, text: 'Заходить 7 дней подряд' } },
+  { key: 'streak30', name: 'Месяц на посту', motto: '30 ДНЕЙ', category: 'game', rarity: 'common', shape: 'shield', bg: '#2f2a4f', bg2: '#1b182f', border: '#b8bde0', ink: '#eceef9', icon: 'clock',
+    condition: { kind: 'stat', key: 'maxStreak', value: 30, text: 'Заходить 30 дней подряд' } },
+  { key: 'seasonHero', name: 'Герой сезона', motto: 'СЕЗОН', category: 'game', rarity: 'common', shape: 'arch', bg: '#4f2a3a', bg2: '#2f1822', border: '#f0a48f', ink: '#fbe4ec', icon: 'star',
+    condition: { kind: 'stat', key: 'seasonStoryDone', value: 1, text: 'Пройти сюжет сезона до конца' } },
+  { key: 'prestige', name: 'Новый рубеж', motto: 'ПРЕСТИЖ', category: 'game', rarity: 'common', shape: 'diamond', bg: '#4d3a14', bg2: '#2b200a', border: '#f6dc8a', ink: '#fff6d6', icon: 'up',
+    condition: { kind: 'stat', key: 'prestige', value: 1, text: 'Перевести полигон на новый рубеж (престиж)' } },
+
+  // ── за рейтинг и сезоны
+  { key: 'weeklyTop3', name: 'Тройка недели', motto: 'ТОП-3', category: 'rating', rarity: 'common', shape: 'shield', bg: '#3a3a4f', bg2: '#22222f', border: '#c9cfd6', ink: '#eef1f4', icon: 'star' },
+  { key: 'weeklyChampion', name: 'Лучший за неделю', motto: 'ЧЕМПИОН НЕДЕЛИ', category: 'rating', rarity: 'common', shape: 'round', bg: '#4d3a14', bg2: '#2b200a', border: '#f6dc8a', ink: '#fff6d6', icon: 'star' },
+  { key: 'seasonVeteran', name: 'Ветеран сезона', motto: 'ВЕТЕРАН СЕЗОНА', category: 'rating', rarity: 'common', shape: 'tab', bg: '#2f3d3a', bg2: '#1b2624', border: '#8fa77d', ink: '#e6eadf', icon: 'flag' },
+  { key: 'seasonTop10', name: 'Десятка сезона', motto: 'ТОП-10', category: 'rating', rarity: 'common', shape: 'hex', bg: '#2a3a4f', bg2: '#18222f', border: '#9fc3d6', ink: '#e6f0f5', icon: 'medal' },
+  { key: 'seasonTop3', name: 'Призёр сезона', motto: 'ТОП-3 СЕЗОНА', category: 'rating', rarity: 'common', shape: 'shield', bg: '#4a3a4f', bg2: '#2c2230', border: '#c9a6d6', ink: '#f4e8f8', icon: 'medal' },
+  { key: 'seasonChampion', name: 'Чемпион сезона', motto: 'ЧЕМПИОН', category: 'rating', rarity: 'common', shape: 'arch', bg: '#5a4520', bg2: '#33260f', border: '#f6dc8a', ink: '#fff6d6', icon: 'star' },
+
   // ── за особые заслуги на сайте «Учёт дронов»
   { key: 'siteAccountant', name: 'Лучший учётчик', motto: 'УЧЁТ', category: 'site', rarity: 'common', shape: 'shield', bg: '#1f3b4d', bg2: '#11222d', border: '#f6dc8a', ink: '#fff6d6', icon: 'reports' },
   { key: 'siteProp', name: 'Золотой пропеллер', motto: 'ЗОЛОТОЙ ПРОПЕЛЛЕР', category: 'site', rarity: 'common', shape: 'round', bg: '#4d3a14', bg2: '#2b200a', border: '#f6dc8a', ink: '#fff6d6', icon: 'fpv' },
@@ -121,6 +153,28 @@ export const CHEVRONS: ChevronDef[] = [
 ];
 
 export const DEFAULT_CHEVRON = 'polygon';
+
+/** Комплекты: собрал все нашивки набора — получил постоянный бонус. */
+export interface ChevronSet {
+  key: string;
+  name: string;
+  keys: string[];
+  mods: Record<string, number>; // ключи Mods из progression.ts
+  text: string;
+}
+export const CHEVRON_SETS: ChevronSet[] = [
+  { key: 'cadet', name: 'Курсант', keys: ['polygon', 'platoon', 'course', 'firstFlight'], mods: { rewards: 0.03 }, text: 'награды +3%' },
+  { key: 'warpath', name: 'Боевой путь', keys: ['raider', 'stormer', 'convoy', 'eyes'], mods: { power: 0.04 }, text: 'сила группы +4%' },
+  { key: 'keeper', name: 'Хозяйство', keys: ['foreman', 'instructor', 'defender'], mods: { production: 0.05 }, text: 'производство +5%' },
+  { key: 'pirates', name: 'Пиратский набор', keys: ['u_pirateKnife', 'u_smileRum'], mods: { rewards: 0.04 }, text: 'награды +4%' },
+  { key: 'kings', name: 'Короли', keys: ['u_kingHearts', 'u_kingRedwar'], mods: { power: 0.05 }, text: 'сила группы +5%' },
+  { key: 'love', name: 'Love is', keys: ['u_loveIs', 'u_loveIsHug'], mods: { losses: 0.04 }, text: 'потери −4%' },
+  { key: 'night', name: 'Ночная работа', keys: ['u_remote', 'siteNight'], mods: { recon: 0.06 }, text: 'разведка +6%' },
+  { key: 'site', name: 'Гордость «Учёта»', keys: ['siteAccountant', 'siteProp', 'siteHands', 'siteNight', 'siteSupport', 'siteVeteran'], mods: { data: 0.1, rewards: 0.05 }, text: 'данные +10%, награды +5%' },
+];
+export function activeSets(owned: Set<string>): ChevronSet[] {
+  return CHEVRON_SETS.filter((st) => st.keys.every((k) => owned.has(k)));
+}
 export const START_CHEVRONS = CHEVRONS.filter((c) => c.category === 'start').map((c) => c.key);
 export const SITE_CHEVRONS = CHEVRONS.filter((c) => c.category === 'site').map((c) => c.key);
 export function chevronSeries(c: ChevronDef): ChevronSeries {

@@ -10,6 +10,19 @@ import { Bar, Sheet, Sprite } from '../ui';
 import { Icon } from '../art/icons';
 import { RankBadge, Speech } from '../art/art';
 import { Chevron } from '../art/Chevron';
+import { Leaderboard, RaidBuilder, SetsPanel } from './Long';
+
+function PvpButtons({ id, callsign }: { id: number; callsign: string }) {
+  const [raid, setRaid] = useState(false);
+  return (
+    <div className="row wrap">
+      <button className="btn secondary small" onClick={() => setRaid(true)}>
+        <Icon name="flag" size={16} /> Разведка и набег
+      </button>
+      {raid && <RaidBuilder target={{ id, callsign }} onClose={() => setRaid(false)} />}
+    </div>
+  );
+}
 
 export function chevronColor(key: string): string {
   return chevronByKey(key)?.border ?? '#edbb76';
@@ -119,6 +132,7 @@ export function ChevronsTab() {
           </section>
         );
       })}
+      <SetsPanel />
       {preview && <MyProfilePreview onClose={() => setPreview(false)} />}
     </>
   );
@@ -159,6 +173,13 @@ export function MatesTab() {
       <Speech who="sova" compact>
         Здесь все командиры полигонов. Загляните в профиль — посмотрите, кто чем может похвастаться.
       </Speech>
+      <h2 className="section-title">
+        <Icon name="star" size={20} /> Рейтинг
+      </h2>
+      <Leaderboard onOpen={setOpen} />
+      <h2 className="section-title">
+        <Icon name="recon" size={20} /> Поиск
+      </h2>
       <label className="search">
         <Icon name="recon" size={18} />
         <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Поиск по позывному или имени" aria-label="Поиск сослуживцев" />
@@ -252,6 +273,7 @@ export function ProfileSheet({ id, onClose }: { id: number; onClose: () => void 
               </div>
             );
           })}
+          {!p.me && <PvpButtons id={p.id} callsign={p.callsign} />}
           {p.awards.length > 0 && (
             <>
               <h3>

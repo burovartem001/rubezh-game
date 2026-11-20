@@ -47,8 +47,8 @@ function Field({ x, y, w, h, rot, seed }: { x: number; y: number; w: number; h: 
 }
 
 export function MapArt({
-  sectors, expeditions, now, selected, onSelect,
-}: { sectors: SectorState[]; expeditions: Expedition[]; now: number; selected: number | null; onSelect: (id: number) => void }) {
+  sectors, expeditions, now, selected, onSelect, hot, tint,
+}: { sectors: SectorState[]; expeditions: Expedition[]; now: number; selected: number | null; onSelect: (id: number) => void; hot?: number; tint?: string }) {
   const ss = (id: number) => sectors.find((s) => s.id === id)!;
   const pos = (id: number) => (id === 0 ? HOME : sectorById(id)!);
   const known = (id: number) => id === 0 || ss(id).unlocked || SECTORS.find((s) => s.id === id)!.links.some((l) => l === 0 || ss(l)?.unlocked);
@@ -175,7 +175,7 @@ export function MapArt({
       ))}
 
       {/* маршруты групп в походе */}
-      {expeditions.map((x) => {
+      {expeditions.filter((x) => x.sectorId > 0).map((x) => {
         const S = sectorById(x.sectorId)!;
         const f = Math.max(0, Math.min(1, (now - x.startAt) / (x.endAt - x.startAt)));
         const k = f < 0.4 ? f / 0.4 : f < 0.6 ? 1 : 1 - (f - 0.6) / 0.4;
@@ -217,6 +217,7 @@ export function MapArt({
           >
             <circle cx={s.x} cy={s.y} r="7.5" className="hit" />
             {cls === 'open' && <circle cx={s.x} cy={s.y} r="4.4" className="pulse" />}
+            {hot === s.id && st.unlocked && <circle cx={s.x} cy={s.y} r="5.6" className="hot-ring" />}
             <circle cx={s.x} cy={s.y} r="4" className="disc" />
             {vis && st.unlocked ? (
               <Icon name={TYPE_ICON[s.type]} size={4.6} x={s.x - 2.3} y={s.y - 2.3} stroke={2} />
@@ -252,6 +253,7 @@ export function MapArt({
         <rect width="5" height=".9" /><rect x="5" width="5" height=".9" className="w" /><rect x="10" width="5" height=".9" />
         <text x="16" y=".9">2 км (условно)</text>
       </g>
+      {tint && <rect width="100" height="100" fill={tint} opacity=".1" pointerEvents="none" />}
       <rect width="100" height="100" fill="url(#vignette)" pointerEvents="none" />
       <rect x=".6" y=".6" width="98.8" height="98.8" className="frame" />
     </svg>

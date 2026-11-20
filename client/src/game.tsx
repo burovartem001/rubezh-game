@@ -26,7 +26,7 @@ interface Ctx {
   now: number; // серверное время (с поправкой на разницу часов)
   busy: boolean;
   offline: boolean;
-  act: (type: string, params?: Record<string, unknown>) => Promise<boolean>;
+  act: (type: string, params?: Record<string, unknown>) => Promise<false | { data: any }>;
   refresh: () => Promise<void>;
   res: (k: ResKey) => number;
   nav: NavTarget;
@@ -111,12 +111,12 @@ export function GameProvider({ initial, onLogout, children }: { initial: GameSta
         setState(r.state);
         setOffline(false);
         if (r.message) toast('info', r.message);
-        return true;
+        return { data: r.data };
       } catch (e) {
         handleError(e);
         // после ошибки сверяемся с сервером: показываем фактическое состояние
         refresh();
-        return false;
+        return false as const;
       } finally {
         setBusy(false);
       }

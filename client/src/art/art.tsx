@@ -14,6 +14,7 @@ export const BUILDING_SPOTS: Record<BuildingKey, { x: number; y: number; zoom: n
   training: { x: 0.69, y: 0.5, zoom: 3.4 },
   fueldepot: { x: 0.9, y: 0.5, zoom: 3.6 },
   supply: { x: 0.87, y: 0.66, zoom: 3.4 },
+  defense: { x: 0.62, y: 0.86, zoom: 3.2 },
 };
 
 /** Фрагмент панорамы, отцентрованный на точке (cx, cy) с увеличением zoom. aspect — ширина/высота рамки. */

@@ -591,3 +591,77 @@ h2 .ico, h3 .ico { color: var(--amber); margin-right: 2px; }
 @keyframes legend-glow { 50% { filter: drop-shadow(0 0 16px #f6dc8aee) drop-shadow(0 3px 5px #0009); } }
 .chevron.patch.dim img { filter: grayscale(1) brightness(0.4) blur(0.6px); animation: none; }
 .chev-cat.unofficial .chev-card.got { background: linear-gradient(160deg, #1f2a26, #161f1c); }
+
+/* ═════════ Долгая игра ═════════ */
+.section-title { margin: 18px 0 8px; display: flex; gap: 6px; align-items: center; }
+.streak-days { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; margin: 8px 0; }
+.sday { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 6px 0; border-radius: 10px; background: #1c2824; border: 1px solid #33443b; color: var(--muted); font-size: 0.8rem; }
+.sday.done { background: #22352a; color: #c7dda6; border-color: #5f7a43; }
+.sday.today { border-color: var(--amber); color: var(--amber); box-shadow: 0 0 0 1px var(--amber); }
+.season { border-width: 1px; border-style: solid; background: radial-gradient(circle at 90% 0%, #3a302455, transparent 55%), var(--panel); }
+.season-steps { display: flex; gap: 5px; margin: 8px 0; }
+.season-steps i { flex: 1; height: 7px; border-radius: 4px; background: #33433b; }
+.season-steps i.done { background: var(--olive); }
+.season-steps i.now { background: var(--amber); animation: pulse 1.6s infinite; }
+.lab-sum, .def-sum { padding: 8px 0; border-top: 1px solid #2f3e37; }
+.lab-sum:first-of-type { border-top: none; }
+.research-grid { display: grid; gap: 12px; margin-top: 10px; }
+.research-grid .branch header { margin-bottom: 4px; }
+.research-grid .branch h3 { margin: 0; }
+@media (min-width: 720px) { .research-grid { grid-template-columns: 1fr 1fr; } }
+.roster-box { margin-top: 10px; border-radius: 10px; background: #141e1c; border: 1px solid #2f3e37; padding: 4px 10px 8px; }
+.roster-box summary { cursor: pointer; font-size: 0.86rem; padding: 6px 0; color: #e6d4b0; list-style: none; }
+.roster-box summary::-webkit-details-marker { display: none; }
+.soldiers { display: grid; gap: 6px; }
+.soldier { display: flex; gap: 10px; align-items: center; padding: 6px 8px; border-radius: 10px; background: #1a2622; }
+.soldier.s-mission { border-left: 3px solid var(--amber); }
+.soldier.s-wounded, .soldier.s-recovering { border-left: 3px solid var(--red); opacity: 0.85; }
+.sol-lvl { display: flex; flex-direction: column-reverse; gap: 2px; }
+.sol-lvl i { width: 9px; height: 5px; border-radius: 2px; background: #33433b; }
+.sol-lvl i.on { background: var(--amber); }
+.sol-info { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.sol-info small { font-size: 0.74rem; color: var(--muted); }
+.sol-info .bar { height: 4px; margin: 3px 0 0; }
+.memorial { border-color: #55605a; background: linear-gradient(160deg, #1a2020, #121717); }
+.memorial-list { display: flex; flex-wrap: wrap; gap: 6px; }
+.mem { display: flex; flex-direction: column; padding: 6px 10px; border-radius: 8px; background: #1f2626; border: 1px solid #3c4646; }
+.mem small { font-size: 0.72rem; color: var(--muted); }
+.sets { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 8px; }
+.set-card { padding: 10px; border-radius: 12px; background: #161f1c; border: 1px dashed #3f5046; display: flex; flex-direction: column; gap: 6px; }
+.set-card.done { border: 1px solid #c99a3b; background: linear-gradient(160deg, #2b2416, #161f1c); }
+.set-row { display: flex; gap: 4px; flex-wrap: wrap; }
+.prestige { border-color: #8f6518; }
+.link-code { display: flex; flex-direction: column; gap: 2px; margin: 8px 0; padding: 10px; border-radius: 10px; background: #2a251c; border: 1px dashed var(--amber); }
+.link-code b { font-size: 1.6rem; letter-spacing: 0.2em; color: var(--amber); }
+.mate.top1 { border-color: #f6dc8a; background: linear-gradient(90deg, #3d3018, #18231f); }
+.mate.top2 { border-color: #c9cfd6; }
+.mate.top3 { border-color: #c98a5a; }
+.tag-co { font-style: normal; font-size: 0.72rem; color: var(--amber); }
+.lb-points { font-weight: 800; color: var(--amber); min-width: 40px; text-align: right; }
+.co-tag { display: grid; place-items: center; min-width: 46px; height: 46px; padding: 0 6px; border-radius: 10px; background: #3a3024; border: 2px solid #a27947; color: #f7d29e; font-weight: 800; font-size: 0.8rem; }
+.co-tag.big { min-width: 72px; height: 72px; font-size: 1.1rem; }
+.company-head { display: flex; gap: 14px; align-items: center; }
+.company-head h2 { margin: 0; }
+.op { border-color: #7a4b40; }
+.donate { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
+.donate select, .donate input { min-height: 42px; border-radius: 10px; border: 1px solid var(--border2); background: #101a19; color: var(--text); padding: 0 10px; }
+.donate input { width: 100px; }
+.mate-open { background: none; border: none; padding: 0; cursor: pointer; }
+.mate .btn.small { min-height: 38px; }
+.event-banner { display: grid; gap: 6px; margin-top: 12px; }
+.ev-weather, .ev-hot { display: flex; gap: 10px; align-items: flex-start; padding: 8px 12px; border-radius: 12px; background: #1c2a25; border: 1px solid var(--border); }
+.ev-weather .ico { color: #9fd0d6; margin-top: 2px; }
+.ev-hot { border-color: #d9902a; background: linear-gradient(90deg, #3a2a14, #1c2a25); }
+.ev-hot .ico { color: #ffb347; margin-top: 2px; animation: pulse 1.4s infinite; }
+.ev-hot.off { opacity: 0.6; }
+.ev-weather span, .ev-hot span { display: flex; flex-direction: column; }
+.ev-weather small, .ev-hot small { font-size: 0.76rem; color: var(--muted); }
+@media (min-width: 720px) { .event-banner { grid-template-columns: 1fr 1fr; } }
+.mapart .hot-ring { fill: none; stroke: #e8742a; stroke-width: 0.8; stroke-dasharray: 1.2 0.8; transform-box: fill-box; transform-origin: center; animation: spin 6s linear infinite; }
+.intel { display: flex; flex-direction: column; gap: 4px; padding: 10px 12px; border-radius: 12px; background: #131d1b; border: 1px solid #4d5f52; margin: 6px 0; }
+.soldier-news { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
+.sn { display: inline-flex; gap: 4px; align-items: center; padding: 3px 9px; border-radius: 20px; font-size: 0.78rem; background: #26352f; }
+.sn.up { background: #4a3c27; color: var(--amber); }
+.sn.wnd { background: #3a3024; color: #f7d29e; }
+.sn.ok { background: #22352a; color: #c7dda6; }
+.sn.lost { background: #3a2622; color: #f0a48f; }

@@ -7,6 +7,7 @@ import { useGame } from '../game';
 import { CostLine, RewardLine, Sheet, ago, pad2 } from '../ui';
 import { Icon, MISSION_ICON } from '../art/icons';
 import { Portrait, Speech, Stamp } from '../art/art';
+import { DefenseReportBody, SoldierNews } from './Long';
 
 const tone = (o: Report['outcome']) => (o === 'fail' ? 'bad' : o === 'partial' ? 'mid' : 'ok');
 
@@ -39,7 +40,25 @@ export function ReportsScreen() {
       </div>
       {!list.length && <Speech who={EMPTY.reports.who}>{EMPTY.reports.text}</Speech>}
       <div className="reports">
-        {list.map((r) => (
+        {list.map((r) =>
+          r.kind === 'defense' || r.kind === 'pvp_defense' ? (
+            <button key={r.id} className={`report-card o-${r.won ? 'success' : 'fail'} ${r.read ? '' : 'unread'}`} onClick={() => setOpen(r)}>
+              <span className="rc-icon">
+                <Icon name={r.kind === 'defense' ? 'reb' : 'flag'} size={24} />
+              </span>
+              <span className="rc-body">
+                <span className="between">
+                  <b>{r.kind === 'defense' ? 'Атака на полигон' : `Набег «${r.attacker}»`}</b>
+                  <span className="muted tiny">{ago(r.createdAt, now)}</span>
+                </span>
+                <span className="rc-line">
+                  <span className={`rc-outcome t-${r.won ? 'ok' : 'bad'}`}>{r.won ? 'ОТБИТО' : 'ПРОРЫВ'}</span>
+                  {r.won ? <RewardLine cost={r.reward ?? {}} /> : <span className="small red">потеряно: <CostLine cost={r.lost ?? {}} check={false} /></span>}
+                </span>
+              </span>
+              {!r.read && <i className="unread-dot" aria-label="новый" />}
+            </button>
+          ) : (
           <button key={r.id} className={`report-card o-${r.outcome} ${r.read ? '' : 'unread'}`} onClick={() => setOpen(r)}>
             <span className="rc-icon">
               <Icon name={MISSION_ICON[r.mission]} size={24} />
@@ -67,7 +86,8 @@ export function ReportsScreen() {
             </span>
             {!r.read && <i className="unread-dot" aria-label="новый" />}
           </button>
-        ))}
+          ),
+        )}
       </div>
       {list.length >= 20 && !end && (
         <button className="btn secondary" onClick={more}>
@@ -80,6 +100,16 @@ export function ReportsScreen() {
 }
 
 export function ReportSheet({ r, onClose }: { r: Report; onClose: () => void }) {
+  if (r.kind === 'defense' || r.kind === 'pvp_defense')
+    return (
+      <Sheet title={r.kind === 'defense' ? 'Атака на полигон' : 'Набег на полигон'} onClose={onClose}>
+        <DefenseReportBody r={r} />
+      </Sheet>
+    );
+  return <ExpeditionReport r={r} onClose={onClose} />;
+}
+
+function ExpeditionReport({ r, onClose }: { r: Report; onClose: () => void }) {
   const { go, state } = useGame();
   const story = expeditionStory({
     id: r.id,
@@ -99,7 +129,7 @@ export function ReportSheet({ r, onClose }: { r: Report; onClose: () => void }) 
   const hasWounded = OPERATOR_TYPES.some((t) => state.operators[t].wounded > 0);
   const [why, setWhy] = useState(false);
   return (
-    <Sheet title={`Отчёт · сектор ${pad2(r.sectorId)}`} onClose={onClose} wide>
+    <Sheet title={r.kind === 'pvp_attack' ? 'Отчёт · набег' : `Отчёт · сектор ${pad2(r.sectorId)}`} onClose={onClose} wide>
       <div className={`report-hero o-${r.outcome}`}>
         <div>
           <span className="kicker">
@@ -123,6 +153,12 @@ export function ReportSheet({ r, onClose }: { r: Report; onClose: () => void }) 
         ))}
       </div>
 
+      <SoldierNews s={r.soldiers} />
+      {(r.companyDamage ?? 0) > 0 && (
+        <p className="small amber">
+          <Icon name="stronghold" size={14} /> Урон по укрепрайону роты: {r.companyDamage}
+        </p>
+      )}
       <h3>
         <Icon name="gift" size={18} /> Трофеи
       </h3>
@@ -227,9 +263,11 @@ export function ReportSheet({ r, onClose }: { r: Report; onClose: () => void }) 
             <Icon name="wrench" size={16} /> В ремонт
           </button>
         )}
-        <button className="btn secondary small" onClick={() => { onClose(); go('map', `sector-${r.sectorId}`); }}>
-          <Icon name="map" size={16} /> Снова в сектор
-        </button>
+        {r.kind !== 'pvp_attack' && (
+          <button className="btn secondary small" onClick={() => { onClose(); go('map', `sector-${r.sectorId}`); }}>
+            <Icon name="map" size={16} /> Снова в сектор
+          </button>
+        )}
       </div>
     </Sheet>
   );

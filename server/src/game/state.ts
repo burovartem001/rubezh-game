@@ -45,6 +45,11 @@ import {
 } from '../../../shared/config.js';
 import type { ExpeditionResult, Group, Plan } from '../../../shared/calc.js';
 import { CHEVRONS, ChevronProgress, START_CHEVRONS, chevronByKey, chevronEarned } from '../../../shared/chevrons.js';
+import { POINTS, researchByKey, seasonEnd, seasonIndex, seasonTheme, weekEnd, weekIndex, weeklyContracts } from '../../../shared/progression.js';
+import {
+  Meta, Period, SoldierRow, addPoints, companyDamage, defenseOf, loadMeta, playerModParts, playerMods, saveMeta, settleMeta, soldiersAfterExpedition,
+  streakInfo, track, trackExpedition,
+} from './meta.js';
 import type { Db } from '../db.js';
 
 export class GameError extends Error {
@@ -56,8 +61,8 @@ export class GameError extends Error {
 export interface OpRow { available: number; on_mission: number; wounded: number; recovering: number; lost_total: number; trained: number; rank: number }
 export interface VehRow { level: number; status: 'ready' | 'mission' | 'damaged' | 'workshop' }
 export interface EqRow { id: number; type: EquipmentType; rarity: Rarity; level: number; status: 'ready' | 'mission'; source: string; dirty?: boolean }
-export interface JobRow { id: number; queue: 'build' | 'train' | 'workshop' | 'recovery'; kind: string; payload: any; cost: Cost; start_at: number; end_at: number; done: boolean }
-export interface SecRow { recon: number; control: number; attempts: number; successes: number }
+export interface JobRow { id: number; queue: 'build' | 'train' | 'workshop' | 'recovery' | 'research'; kind: string; payload: any; cost: Cost; start_at: number; end_at: number; done: boolean }
+export interface SecRow { recon: number; control: number; attempts: number; successes: number; control_at?: number | null }
 export interface ExpRow {
   id: number; sector_id: number; mission: MissionType; group_comp: Group; vehicle: VehicleType; equipment: number[];
   cost: Cost; plan: Plan; result: ExpeditionResult; start_at: number; end_at: number; status: 'active' | 'done';
@@ -84,6 +89,13 @@ export interface PS {
   newAwards: { award: string; count: number; reason: string }[];
   chevrons: { key: string; source: string; at: number }[];
   newChevrons: string[];
+  meta: Meta;
+  research: Set<string>;
+  soldiers: SoldierRow[];
+  weekly: { week: string; counters: Record<string, number>; claimed: Record<string, boolean> };
+  scoreW: Period;
+  scoreS: Period;
+  companyId: number | null;
 }
 
 const ms = (d: Date | string) => new Date(d).getTime();
@@ -118,7 +130,7 @@ export async function loadState(c: Db, userId: number): Promise<PS> {
     c.query('SELECT id, award, count, reason, source, seen, created_at FROM awards WHERE user_id=$1 ORDER BY created_at DESC, id DESC LIMIT 100', [userId]),
     c.query('SELECT chevron, source, created_at FROM player_chevrons WHERE user_id=$1 ORDER BY created_at, chevron', [userId]),
   ]);
-  const ps: PS = {
+  const ps = {
     userId,
     p: {
       callsign: r.callsign, commander_name: r.commander_name, portrait: r.portrait, chevron: r.chevron,
@@ -130,7 +142,7 @@ export async function loadState(c: Db, userId: number): Promise<PS> {
     vehicles: Object.fromEntries(v.rows.map((row) => [row.type, { level: row.level, status: row.status }])),
     equipment: e.rows.map((row) => ({ ...row })),
     jobs: j.rows.map((row) => ({ id: row.id, queue: row.queue, kind: row.kind, payload: row.payload, cost: row.cost, start_at: ms(row.start_at), end_at: ms(row.end_at), done: row.done })),
-    sectors: Object.fromEntries(s.rows.map((row) => [row.sector_id, { recon: row.recon, control: row.control, attempts: row.attempts, successes: row.successes }])),
+    sectors: Object.fromEntries(s.rows.map((row) => [row.sector_id, { recon: row.recon, control: row.control, attempts: row.attempts, successes: row.successes, control_at: row.control_at ? ms(row.control_at) : null }])),
     expeditions: x.rows.map((row) => ({ ...row, start_at: ms(row.start_at), end_at: ms(row.end_at) })),
     daily: d.rowCount ? { day: d.rows[0].day, counters: d.rows[0].counters, claimed: d.rows[0].claimed } : { day: '', counters: {}, claimed: {} },
     notices: [],
@@ -138,7 +150,8 @@ export async function loadState(c: Db, userId: number): Promise<PS> {
     newAwards: [],
     chevrons: ch.rows.map((row) => ({ key: row.chevron, source: row.source, at: ms(row.created_at) })),
     newChevrons: [],
-  };
+  } as unknown as PS;
+  await loadMeta(c, ps, r, Date.now());
   for (const k of BUILDING_KEYS) ps.buildings[k] ??= 1;
   for (const t of OPERATOR_TYPES) ps.ops[t] ??= { available: 0, on_mission: 0, wounded: 0, recovering: 0, lost_total: 0, trained: 0, rank: 1 };
   return ps;
@@ -153,7 +166,8 @@ export async function saveState(c: Db, ps: PS) {
     [ps.userId, p.callsign, p.commander_name, p.portrait, p.chevron, p.supplies, p.parts, p.fuel, p.data, p.res_updated_at,
       p.tutorial_step, p.cmd_xp, p.cmd_level, JSON.stringify(p.skills), p.free_reset_used, JSON.stringify(p.stats)],
   );
-  for (const k of BUILDING_KEYS) await c.query('UPDATE buildings SET level=$3 WHERE user_id=$1 AND key=$2', [ps.userId, k, ps.buildings[k]]);
+  for (const k of BUILDING_KEYS)
+    await c.query('INSERT INTO buildings(user_id,key,level) VALUES ($1,$2,$3) ON CONFLICT (user_id,key) DO UPDATE SET level=$3', [ps.userId, k, ps.buildings[k]]);
   for (const t of OPERATOR_TYPES) {
     const o = ps.ops[t];
     await c.query(
@@ -171,9 +185,9 @@ export async function saveState(c: Db, ps: PS) {
   for (const e of ps.equipment) if (e.dirty) await c.query('UPDATE equipment SET level=$2, status=$3 WHERE id=$1', [e.id, e.level, e.status]);
   for (const [id, s] of Object.entries(ps.sectors)) {
     await c.query(
-      `INSERT INTO sectors(user_id,sector_id,recon,control,attempts,successes) VALUES ($1,$2,$3,$4,$5,$6)
-       ON CONFLICT (user_id,sector_id) DO UPDATE SET recon=$3,control=$4,attempts=$5,successes=$6`,
-      [ps.userId, Number(id), s.recon, s.control, s.attempts, s.successes],
+      `INSERT INTO sectors(user_id,sector_id,recon,control,attempts,successes,control_at) VALUES ($1,$2,$3,$4,$5,$6,to_timestamp($7/1000.0))
+       ON CONFLICT (user_id,sector_id) DO UPDATE SET recon=$3,control=$4,attempts=$5,successes=$6,control_at=to_timestamp($7/1000.0)`,
+      [ps.userId, Number(id), s.recon, s.control, s.attempts, s.successes, s.control_at ?? null],
     );
   }
   if (ps.daily.day) {
@@ -182,23 +196,26 @@ export async function saveState(c: Db, ps: PS) {
       [ps.userId, ps.daily.day, JSON.stringify(ps.daily.counters), JSON.stringify(ps.daily.claimed)],
     );
   }
+  await saveMeta(c, ps);
 }
 
 /* ───────────── ресурсы ───────────── */
 
 export function caps(ps: PS): Record<ResKey, number> {
+  const k = 1 + Math.max(-0.5, playerMods(ps).storage);
   return {
-    supplies: storageCap(ps.buildings.supply),
-    parts: storageCap(ps.buildings.workshop),
-    fuel: storageCap(ps.buildings.fueldepot),
+    supplies: Math.round(storageCap(ps.buildings.supply) * k),
+    parts: Math.round(storageCap(ps.buildings.workshop) * k),
+    fuel: Math.round(storageCap(ps.buildings.fueldepot) * k),
     data: Infinity,
   };
 }
 export function rates(ps: PS): Record<'supplies' | 'parts' | 'fuel', number> {
+  const k = 1 + Math.max(-0.5, playerMods(ps).production);
   return {
-    supplies: productionPerHour('supplies', ps.buildings[PRODUCTION.supplies.building]),
-    parts: productionPerHour('parts', ps.buildings[PRODUCTION.parts.building]),
-    fuel: productionPerHour('fuel', ps.buildings[PRODUCTION.fuel.building]),
+    supplies: Math.round(productionPerHour('supplies', ps.buildings[PRODUCTION.supplies.building]) * k),
+    parts: Math.round(productionPerHour('parts', ps.buildings[PRODUCTION.parts.building]) * k),
+    fuel: Math.round(productionPerHour('fuel', ps.buildings[PRODUCTION.fuel.building]) * k),
   };
 }
 /** Производство до момента t. Выше вместимости хранилища производство останавливается, накопленное сверх неё (награды) не сгорает. */
@@ -336,6 +353,15 @@ export async function checkChevrons(c: Db, ps: PS) {
 
 export async function settle(c: Db, ps: PS, now: number, opts: { showAwards?: boolean } = {}) {
   touchDaily(ps, now);
+  // помощь сослуживцев по роте сокращает текущую стройку
+  const helps = await c.query('UPDATE company_helps SET applied=true WHERE target_id=$1 AND NOT applied RETURNING job_id, seconds', [ps.userId]);
+  for (const h of helps.rows) {
+    const job = ps.jobs.find((j) => j.id === Number(h.job_id) && !j.done);
+    if (!job) continue;
+    job.end_at = Math.max(job.start_at, job.end_at - h.seconds * 1000);
+    await c.query('UPDATE jobs SET end_at=to_timestamp($2/1000.0) WHERE id=$1', [job.id, job.end_at]);
+  }
+  if (helps.rowCount) ps.notices.push({ kind: 'success', text: `Сослуживцы помогли со стройкой: ${helps.rowCount} раз(а)` });
   type Ev = { t: number; job?: JobRow; exp?: ExpRow };
   const events: Ev[] = [
     ...ps.jobs.filter((j) => !j.done && j.end_at <= now).map((job) => ({ t: job.end_at, job })),
@@ -357,6 +383,7 @@ export async function settle(c: Db, ps: PS, now: number, opts: { showAwards?: bo
       ps.notices.push({ kind: 'success', text: `Награда за заслуги: ${awardName(a.award)}${a.count > 1 ? ` ×${a.count}` : ''}${a.reason ? ` — ${a.reason}` : ''}` });
     }
   }
+  await settleMeta(c, ps, now);
   ps.jobs = ps.jobs.filter((j) => !j.done);
   ps.expeditions = ps.expeditions.filter((x) => x.status === 'active');
   await checkTutorial(c, ps);
@@ -374,6 +401,8 @@ async function completeJob(c: Db, ps: PS, job: JobRow, t: number) {
       ps.buildings[k] = Math.max(ps.buildings[k], pl.toLevel);
       bumpStat(ps, 'buildsDone');
       bumpDaily(ps, t, 'build');
+      track(ps, 'build');
+      addPoints(ps, POINTS.build);
       ps.notices.push({ kind: 'success', text: `${BUILDINGS[k].name}: улучшено до ${pl.toLevel} уровня` });
       break;
     }
@@ -382,6 +411,7 @@ async function completeJob(c: Db, ps: PS, job: JobRow, t: number) {
       ps.ops[type].available += pl.count;
       ps.ops[type].trained += pl.count;
       bumpDaily(ps, t, 'train', pl.count);
+      track(ps, 'trained', pl.count);
       ps.notices.push({ kind: 'success', text: `${OPERATORS[type].name}: подготовлено ${pl.count}` });
       break;
     }
@@ -425,6 +455,18 @@ async function completeJob(c: Db, ps: PS, job: JobRow, t: number) {
       ps.notices.push({ kind: 'success', text: `${VEHICLES[pl.type as VehicleType].name}: ремонт завершён` });
       break;
     }
+    case 'research': {
+      const def = researchByKey(pl.key);
+      if (def && !ps.research.has(def.key)) {
+        ps.research.add(def.key);
+        await c.query('INSERT INTO research(user_id,key) VALUES ($1,$2) ON CONFLICT DO NOTHING', [ps.userId, def.key]);
+        bumpStat(ps, 'researchDone');
+        track(ps, 'research');
+        addPoints(ps, POINTS.research);
+        ps.notices.push({ kind: 'success', text: `Исследование завершено: «${def.name}»` });
+      }
+      break;
+    }
     case 'craft': {
       const text = await addEquipment(c, ps, pl.type, pl.rarity, 'Мастерская');
       ps.notices.push({ kind: 'success', text });
@@ -439,8 +481,10 @@ async function completeExpedition(c: Db, ps: PS, x: ExpRow, t: number) {
   x.status = 'done';
   if (!upd.rowCount) return;
   const res = x.result;
-  const sector = sectorById(x.sector_id)!;
-  const sec = sectorState(ps, x.sector_id);
+  const isPvp = x.mission === 'pvp';
+  const target = (x.plan as any).target as { id: number; callsign: string } | undefined;
+  const sector = isPvp ? { name: `Полигон «${target?.callsign ?? '?'}»`, difficulty: 3 } : sectorById(x.sector_id)!;
+  const sec = isPvp ? { recon: 0, control: 0, attempts: 0, successes: 0 } : sectorState(ps, x.sector_id);
   const before = { recon: sec.recon, control: sec.control };
 
   for (const type of OPERATOR_TYPES) {
@@ -462,6 +506,10 @@ async function completeExpedition(c: Db, ps: PS, x: ExpRow, t: number) {
   if (res.outcome === 'success' || res.outcome === 'decisive') sec.successes++;
   sec.recon = Math.min(100, sec.recon + res.reconGain);
   sec.control = Math.min(100, sec.control + res.controlGain);
+  if (res.controlGain > 0) sec.control_at = t;
+  const soldierNews = soldiersAfterExpedition(ps, x, res, t, sector.difficulty, Number((x as any).seed ?? x.id));
+  trackExpedition(ps, x, res, sector.difficulty);
+  const dmg = await companyDamage(c, ps, x, res, sector.difficulty, ps.scoreW.period);
 
   const lvlBefore = ps.p.cmd_level;
   ps.p.cmd_xp += res.xp;
@@ -508,6 +556,10 @@ async function completeExpedition(c: Db, ps: PS, x: ExpRow, t: number) {
     recon: { before: before.recon, after: sec.recon },
     control: { before: before.control, after: sec.control },
     reasons: res.reasons,
+    kind: isPvp ? 'pvp_attack' : 'expedition',
+    target: target ?? null,
+    soldiers: soldierNews,
+    companyDamage: dmg,
   };
   const ins = await c.query(
     'INSERT INTO reports(user_id, expedition_id, created_at, body) VALUES ($1,$2,to_timestamp($3/1000.0),$4) ON CONFLICT (expedition_id) DO NOTHING',
@@ -516,7 +568,7 @@ async function completeExpedition(c: Db, ps: PS, x: ExpRow, t: number) {
   if (!ins.rowCount) throw new Error('report already exists for expedition ' + x.id);
   ps.notices.push({
     kind: res.outcome === 'fail' ? 'warn' : 'success',
-    text: `Поход в сектор ${String(x.sector_id).padStart(2, '0')} завершён: ${OUTCOME_NAMES[res.outcome]}`,
+    text: isPvp ? `Набег на ${sector.name}: ${OUTCOME_NAMES[res.outcome]}` : `Поход в сектор ${String(x.sector_id).padStart(2, '0')} завершён: ${OUTCOME_NAMES[res.outcome]}`,
   });
   if (body.levelUp) ps.notices.push({ kind: 'success', text: `Командир достиг ${body.levelUp} уровня — доступен навык` });
 }
@@ -590,6 +642,20 @@ export function view(ps: PS, now: number) {
     newAwards: ps.newAwards,
     chevrons: ps.chevrons,
     newChevrons: ps.newChevrons,
+    research: [...ps.research],
+    soldiers: ps.soldiers.filter((x) => x.status !== 'retired').map(({ dirty, ...x }) => x),
+    weekly: { week: ps.weekly.week, counters: ps.weekly.counters, claimed: ps.weekly.claimed },
+    contracts: weeklyContracts(ps.userId, weekIndex(now), ps.p.cmd_level, ps.companyId != null),
+    week: { index: weekIndex(now), points: ps.scoreW.points, endsAt: weekEnd(weekIndex(now)) },
+    season: { index: seasonIndex(now), points: ps.scoreS.points, counters: ps.scoreS.counters, endsAt: seasonEnd(seasonIndex(now)), theme: seasonTheme(seasonIndex(now)).key },
+    streak: streakInfo(ps, now),
+    modParts: playerModParts(ps, now),
+    prestige: ps.meta.prestige,
+    companyId: ps.companyId,
+    siteLinked: !!ps.meta.siteUserId,
+    linkCode: ps.meta.linkCode && (ps.meta.linkCodeExp ?? 0) > now ? { code: ps.meta.linkCode, until: ps.meta.linkCodeExp } : null,
+    defense: defenseOf(ps, now),
+    createdAt: ps.meta.createdAt,
   };
 }
 export type StateView = ReturnType<typeof view>;

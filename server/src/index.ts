@@ -8,6 +8,7 @@ import { GameError, PS, applyAward, checkChevrons, checkTutorial, grantChevron, 
 import crypto from 'node:crypto';
 import { AWARDS, AWARD_KEYS, AwardKey } from '../../shared/config.js';
 import { SITE_CHEVRONS, chevronByKey } from '../../shared/chevrons.js';
+import { registerSocialRoutes } from './game/social.js';
 import { log } from './log.js';
 import { APP_ROOT } from './root.js';
 
@@ -71,20 +72,24 @@ api.post('/action', requireAuth, async (req: AuthedRequest, res) => {
     const ps = await loadState(c, req.userId!); // замок строки игрока: действия одного игрока выполняются строго по очереди
     const now = Date.now();
     let message: string;
+    let data: unknown = null;
     let replayed = false;
     const prev = requestId ? await c.query('SELECT response FROM action_log WHERE user_id=$1 AND request_id=$2', [ps.userId, requestId]) : null;
     await settle(c, ps, now);
     if (prev?.rowCount) {
       message = prev.rows[0].response.message;
+      data = prev.rows[0].response.data ?? null;
       replayed = true;
     } else {
-      message = await handler(c, ps, body, now);
+      const out = await handler(c, ps, body, now);
+      message = typeof out === 'string' ? out : out.message;
+      data = typeof out === 'string' ? null : out.data ?? null;
       await checkTutorial(c, ps);
       await checkChevrons(c, ps);
-      if (requestId) await c.query('INSERT INTO action_log(user_id,request_id,response) VALUES ($1,$2,$3)', [ps.userId, requestId, JSON.stringify({ message })]);
+      if (requestId) await c.query('INSERT INTO action_log(user_id,request_id,response) VALUES ($1,$2,$3)', [ps.userId, requestId, JSON.stringify({ message, data })]);
     }
     await saveState(c, ps);
-    return { message, replayed, state: await fullView(c, ps, now) };
+    return { message, data, replayed, state: await fullView(c, ps, now) };
   });
   res.json(out);
 });
@@ -170,6 +175,23 @@ function integrationAuth(req: Request, res: Response, next: NextFunction) {
   }
   next();
 }
+/** Привязка: игрок получает код в игре («Командир → Профиль»), сайт передаёт код и свой идентификатор пользователя. */
+api.post('/integration/link', integrationAuth, async (req, res) => {
+  const code = String(req.body?.code ?? '').trim().toUpperCase();
+  const siteUserId = String(req.body?.siteUserId ?? '').trim().slice(0, 100);
+  if (!code || !siteUserId) return res.status(400).json({ error: 'Нужны code и siteUserId' });
+  const p = await pool.query('SELECT user_id, callsign FROM players WHERE link_code=$1 AND link_code_exp > now()', [code]);
+  if (!p.rowCount) return res.status(404).json({ error: 'Код не найден или истёк' });
+  try {
+    await pool.query('UPDATE players SET site_user_id=NULL WHERE site_user_id=$1', [siteUserId]);
+    await pool.query('UPDATE players SET site_user_id=$2, link_code=NULL, link_code_exp=NULL WHERE user_id=$1', [p.rows[0].user_id, siteUserId]);
+  } catch (e: any) {
+    if (e?.code === '23505') return res.status(409).json({ error: 'Этот пользователь сайта уже привязан' });
+    throw e;
+  }
+  log.info('site account linked', { userId: p.rows[0].user_id });
+  res.json({ ok: true, callsign: p.rows[0].callsign });
+});
 api.get('/integration/awards', integrationAuth, (_req, res) => {
   res.json({
     awards: [
@@ -188,8 +210,11 @@ api.post('/integration/award', integrationAuth, async (req, res) => {
   const isChevron = SITE_CHEVRONS.includes(award);
   if (!AWARD_KEYS.includes(award) && !isChevron) return res.status(400).json({ error: 'Неизвестная награда', awards: [...AWARD_KEYS, ...SITE_CHEVRONS] });
   if (!Number.isInteger(count) || count < 1 || count > 50) return res.status(400).json({ error: 'count: от 1 до 50' });
-  const u = await pool.query('SELECT id FROM users WHERE login=$1', [login]);
-  if (!u.rowCount) return res.status(404).json({ error: 'Игрок с таким логином не найден' });
+  const siteUserId = b.siteUserId == null ? null : String(b.siteUserId).slice(0, 100);
+  const u = siteUserId
+    ? await pool.query('SELECT user_id AS id FROM players WHERE site_user_id=$1', [siteUserId])
+    : await pool.query('SELECT id FROM users WHERE login=$1', [login]);
+  if (!u.rowCount) return res.status(404).json({ error: siteUserId ? 'Игрок с такой привязкой не найден' : 'Игрок с таким логином не найден' });
   const out = await tx(async (c) => {
     const ps = await loadState(c, u.rows[0].id);
     const now = Date.now();
@@ -216,6 +241,8 @@ api.post('/integration/award', integrationAuth, async (req, res) => {
   });
   res.json(out);
 });
+
+registerSocialRoutes(api, requireAuth);
 
 api.use((_req, res) => res.status(404).json({ error: 'Не найдено' }));
 api.use((err: any, req: Request, res: Response, _next: NextFunction) => {

@@ -19,8 +19,8 @@ export const START_RESOURCES: Record<ResKey, number> = { supplies: 420, parts: 2
 
 /* ───────────────────────────── Здания ───────────────────────────── */
 
-export type BuildingKey = 'hq' | 'training' | 'workshop' | 'supply' | 'fueldepot' | 'comms';
-export const BUILDING_KEYS: BuildingKey[] = ['hq', 'training', 'workshop', 'supply', 'fueldepot', 'comms'];
+export type BuildingKey = 'hq' | 'training' | 'workshop' | 'supply' | 'fueldepot' | 'comms' | 'defense';
+export const BUILDING_KEYS: BuildingKey[] = ['hq', 'training', 'workshop', 'supply', 'fueldepot', 'comms', 'defense'];
 export const MAX_BUILDING_LEVEL = 10;
 
 export interface BuildingDef {
@@ -81,6 +81,14 @@ export const BUILDINGS: Record<BuildingKey, BuildingDef> = {
     baseTime: 25,
     timeGrowth: 1.75,
   },
+  defense: {
+    name: 'Оборона полигона',
+    purpose: 'Посты наблюдения, РЭБ-купол и дежурные расчёты. Отбивает атаки противника на полигон и набеги других командиров.',
+    baseCost: { supplies: 80, parts: 90 },
+    costGrowth: 1.5,
+    baseTime: 20,
+    timeGrowth: 1.75,
+  },
 };
 
 /** Цена улучшения с уровня `level` на `level + 1`. */
@@ -129,7 +137,9 @@ export function buildingEffectText(key: BuildingKey, level: number): string {
     case 'fueldepot':
       return `Топливо: ${productionPerHour('fuel', level)}/ч, хранилище ${storageCap(level)}.`;
     case 'comms':
-      return `Разведка и данные +${Math.round((level - 1) * COMMS_RECON_PER_LEVEL * 100)}%. Доступны секторы до уровня связи ${level}.`;
+      return `Разведка и данные +${Math.round((level - 1) * COMMS_RECON_PER_LEVEL * 100)}%. Доступны секторы до уровня связи ${level}. Исследования ${Math.min(4, Math.floor((level + 1) / 2))} ступени.`;
+    case 'defense':
+      return `Базовая оборона ${8 + level * 10}. Плюс дежурные операторы на базе.`;
   }
 }
 
@@ -579,8 +589,8 @@ export const SECTOR_TYPE_NAMES: Record<SectorType, string> = {
   route: 'Маршрут снабжения',
   event: 'Событийная зона',
 };
-export type MissionType = 'recon' | 'raid' | 'stronghold' | 'supply';
-export const MISSION_TYPES: MissionType[] = ['recon', 'raid', 'stronghold', 'supply'];
+export type MissionType = 'recon' | 'raid' | 'stronghold' | 'supply' | 'expedition' | 'pvp';
+export const MISSION_TYPES: MissionType[] = ['recon', 'raid', 'stronghold', 'supply', 'expedition'];
 
 export interface MissionDef {
   name: string;
@@ -597,13 +607,15 @@ export const MISSIONS: Record<MissionType, MissionDef> = {
   raid: { name: 'Рейд', desc: 'Автоматическое столкновение за припасы и комплектующие. Повышает контроль сектора.', timeMul: 1.2, fuelMul: 1.2, enemyMul: 1, lossMul: 1, combat: true, minRecon: 0 },
   stronghold: { name: 'Опорный пункт', desc: 'Повышенная сложность и награда, шанс получить оснащение. Нужна разведанность от 50%.', timeMul: 1.6, fuelMul: 1.5, enemyMul: 1.8, lossMul: 1.25, combat: true, minRecon: 50 },
   supply: { name: 'Снабжение', desc: 'Спокойное задание: упор на транспорт и добычу топлива.', timeMul: 1.1, fuelMul: 0.8, enemyMul: 0.5, lossMul: 0.5, combat: true, minRecon: 0 },
+  expedition: { name: 'Экспедиция', desc: 'Длительный поход на несколько часов: отправил утром — забрал вечером. Награда примерно в 8 раз больше рейда.', timeMul: 60, fuelMul: 3, enemyMul: 0.9, lossMul: 0.6, combat: true, minRecon: 30 },
+  pvp: { name: 'Набег', desc: 'Набег на полигон другого командира.', timeMul: 1, fuelMul: 1, enemyMul: 1, lossMul: 1.1, combat: true, minRecon: 0 },
 };
 export const SECTOR_MISSIONS: Record<SectorType, MissionType[]> = {
-  observation: ['recon', 'raid'],
-  warehouse: ['recon', 'raid', 'supply'],
-  route: ['recon', 'supply', 'raid'],
-  stronghold: ['recon', 'stronghold'],
-  event: ['recon', 'raid', 'stronghold'],
+  observation: ['recon', 'raid', 'expedition'],
+  warehouse: ['recon', 'raid', 'supply', 'expedition'],
+  route: ['recon', 'supply', 'raid', 'expedition'],
+  stronghold: ['recon', 'stronghold', 'expedition'],
+  event: ['recon', 'raid', 'stronghold', 'expedition'],
 };
 
 export interface SectorDef {
@@ -701,6 +713,10 @@ export function missionRewards(mission: MissionType, difficulty: number): Cost {
       return { parts: Math.round(120 * Math.pow(d, 1.3)), data: Math.round(25 * Math.pow(d, 1.2)), supplies: 60 * d };
     case 'supply':
       return { fuel: Math.round(60 * Math.pow(d, 1.2)), supplies: 40 * d };
+    case 'expedition':
+      return { supplies: Math.round(420 * Math.pow(d, 1.15)), parts: Math.round(320 * Math.pow(d, 1.15)), fuel: Math.round(160 * d), data: Math.round(20 * d) };
+    case 'pvp':
+      return {};
   }
 }
 export function missionXp(difficulty: number, outcome: Outcome): number {

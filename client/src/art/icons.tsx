@@ -107,4 +107,4 @@ export function Icon({ name, size = 20, className, title, stroke = 1.7, x, y }: 
 }
 
 export const RES_ICON = { supplies: 'supplies', parts: 'parts', fuel: 'fuel', data: 'data' } as const;
-export const MISSION_ICON = { recon: 'recon', raid: 'raid', stronghold: 'stronghold', supply: 'supplymission' } as const;
+export const MISSION_ICON = { recon: 'recon', raid: 'raid', stronghold: 'stronghold', supply: 'supplymission', expedition: 'compass', pvp: 'flag' } as const;

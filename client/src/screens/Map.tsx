@@ -12,6 +12,9 @@ import { ExpeditionRow } from '../components/Queues';
 import { Icon, MISSION_ICON } from '../art/icons';
 import { MapArt } from '../art/MapArt';
 import { Portrait, Speech, VehicleArt } from '../art/art';
+import { MapEventBanner, PvpTab, bonusFor } from './Long';
+import { ProfileSheet } from './Mates';
+import { CONTROL_GRACE, mapEventAt, seasonTheme } from '../../../shared/progression';
 import { EquipKind, equipmentPower } from '../../../shared/config';
 
 const TYPE_ICON = { observation: 'observation', warehouse: 'warehouse', stronghold: 'stronghold', route: 'route', event: 'event' } as const;
@@ -27,9 +30,23 @@ export function MapScreen() {
   const ss = (id: number) => state.sectors.find((s) => s.id === id)!;
   const opened = SECTORS.filter((s) => ss(s.id).unlocked);
   const controlled = state.sectors.filter((s) => s.control >= 100).length;
+  const [tab, setTab] = useState<'sectors' | 'pvp'>('sectors');
+  const [openPlayer, setOpenPlayer] = useState<number | null>(null);
+  const ev = mapEventAt(now);
+
+  if (tab === 'pvp')
+    return (
+      <>
+        <MapTabs tab={tab} setTab={setTab} />
+        <PvpTab onOpenPlayer={setOpenPlayer} />
+        {openPlayer != null && <ProfileSheet id={openPlayer} onClose={() => setOpenPlayer(null)} />}
+      </>
+    );
 
   return (
     <>
+      <MapTabs tab={tab} setTab={setTab} />
+      <MapEventBanner />
       <div className="section-head">
         <h2>
           <Icon name="map" size={22} /> Карта секторов
@@ -43,7 +60,7 @@ export function MapScreen() {
       <div className="map-wrap">
         <div className="map-scroll">
           <div style={{ width: `${zoom * 100}%` }}>
-            <MapArt sectors={state.sectors} expeditions={state.expeditions} now={now} selected={sel} onSelect={setSel} />
+            <MapArt sectors={state.sectors} expeditions={state.expeditions} now={now} selected={sel} onSelect={setSel} hot={ev.hotSector} tint={seasonTheme(state.season.index).tint} />
           </div>
         </div>
         <div className="map-tools">
@@ -112,8 +129,23 @@ export function MapScreen() {
   );
 }
 
+function MapTabs({ tab, setTab }: { tab: 'sectors' | 'pvp'; setTab: (t: 'sectors' | 'pvp') => void }) {
+  return (
+    <div className="seg big icons" role="tablist">
+      <button role="tab" aria-selected={tab === 'sectors'} className={tab === 'sectors' ? 'on' : ''} onClick={() => setTab('sectors')}>
+        <Icon name="map" size={20} />
+        <span>Секторы</span>
+      </button>
+      <button role="tab" aria-selected={tab === 'pvp'} className={tab === 'pvp' ? 'on' : ''} onClick={() => setTab('pvp')}>
+        <Icon name="flag" size={20} />
+        <span>Набеги</span>
+      </button>
+    </div>
+  );
+}
+
 function SectorSheet({ id, onClose }: { id: number; onClose: () => void }) {
-  const { state } = useGame();
+  const { state, now } = useGame();
   const s = sectorById(id)!;
   const st = state.sectors.find((x) => x.id === id)!;
   const [mission, setMission] = useState<MissionType | null>(null);
@@ -152,6 +184,13 @@ function SectorSheet({ id, onClose }: { id: number; onClose: () => void }) {
             <div>
               <span className="meter-label"><Icon name="flag" size={16} /> Контроль <b>{st.control}%</b></span>
               <Bar value={st.control} tone="olive" />
+              {st.control > 0 && st.control_at != null && (
+                <span className="tiny muted">
+                  {now - st.control_at < CONTROL_GRACE
+                    ? `держится ещё ${fmtLong((CONTROL_GRACE - (now - st.control_at)) / 1000)}, затем начнёт падать`
+                    : 'контроль падает — нужен успешный рейд или штурм'}
+                </span>
+              )}
             </div>
           </div>
           {st.recon < 100 && (
@@ -224,7 +263,7 @@ function OutcomeMeter({ low, high }: { low: string; high: string }) {
 }
 
 function GroupBuilder({ sector, mission, onBack, onClose }: { sector: SectorDef; mission: MissionType; onBack: () => void; onClose: () => void }) {
-  const { state, act, go } = useGame();
+  const { state, act, go, now } = useGame();
   const affordable = useAffordable();
   const st = state.sectors.find((x) => x.id === sector.id)!;
   const readyVehicles = VEHICLE_TYPES.filter((v) => state.vehicles[v]?.status === 'ready');
@@ -249,7 +288,7 @@ function GroupBuilder({ sector, mission, onBack, onClose }: { sector: SectorDef;
   });
   const equipment = readyEq.filter((e) => eqIds.includes(e.id));
   const plan = vehicle
-    ? planExpedition({ sector, mission, group, ranks, vehicle: { type: vehicle, level: vLevel }, equipment, skills: state.commander.skills, commsLevel: state.buildings.comms, sectorRecon: st.recon })
+    ? planExpedition({ sector, mission, group, ranks, vehicle: { type: vehicle, level: vLevel }, equipment, skills: state.commander.skills, commsLevel: state.buildings.comms, sectorRecon: st.recon, bonus: bonusFor(state, sector.id, now, group) })
     : null;
   const size = groupSize(group);
   const slotsFree = state.expeditions.length < state.slots;

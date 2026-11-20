@@ -50,6 +50,10 @@ import {
   sectorById,
   spentPoints,
   trainTime,
+  gameDay,
+  RES_KEYS,
+  START_OPERATORS,
+  START_RESOURCES,
   vehicleRepairCost,
   vehicleUpgradeCost,
   vehicleUpgradeRequiredWorkshop,
@@ -57,6 +61,9 @@ import {
 } from '../../../shared/config.js';
 import { Group, groupSize, planExpedition, resolveExpedition } from '../../../shared/calc.js';
 import type { Db } from '../db.js';
+import { PRESTIGE_LEVEL, PRESTIGE_MAX, RESEARCH_COST, researchByKey, researchPrereq, streakReward, weekIndex, weeklyContracts } from '../../../shared/progression.js';
+import { addPoints, dispatchBonus, pickSoldiers, playerMods } from './meta.js';
+import { SOCIAL_ACTIONS } from './social.js';
 import { chevronByKey } from '../../../shared/chevrons.js';
 import {
   GameError,
@@ -72,13 +79,13 @@ import {
   touchDaily,
 } from './state.js';
 
-type Handler = (c: Db, ps: PS, a: any, now: number) => Promise<string>;
+export type Handler = (c: Db, ps: PS, a: any, now: number) => Promise<string | { message: string; data?: unknown }>;
 
-function oneOf<T extends string>(v: unknown, list: readonly T[], what: string): T {
+export function oneOf<T extends string>(v: unknown, list: readonly T[], what: string): T {
   if (typeof v !== 'string' || !list.includes(v as T)) throw new GameError(`Неизвестное значение: ${what}`);
   return v as T;
 }
-function int(v: unknown, min: number, max: number, what: string): number {
+export function int(v: unknown, min: number, max: number, what: string): number {
   const n = Number(v);
   if (!Number.isInteger(n) || n < min || n > max) throw new GameError(`Неверное значение: ${what}`);
   return n;
@@ -86,7 +93,7 @@ function int(v: unknown, min: number, max: number, what: string): number {
 function queueEnd(ps: PS, queue: string, now: number): number {
   return ps.jobs.filter((j) => j.queue === queue).reduce((m, j) => Math.max(m, j.end_at), now);
 }
-async function addJob(c: Db, ps: PS, queue: PS['jobs'][number]['queue'], kind: string, payload: any, cost: any, seconds: number, now: number) {
+export async function addJob(c: Db, ps: PS, queue: PS['jobs'][number]['queue'], kind: string, payload: any, cost: any, seconds: number, now: number) {
   const start = queueEnd(ps, queue, now);
   const end = start + Math.max(1, seconds) * 1000;
   const r = await c.query(
@@ -153,10 +160,12 @@ export const ACTIONS: Record<string, Handler> = {
     for (const t of OPERATOR_TYPES) if (ps.ops[t].wounded > 0) { counts[t] = ps.ops[t].wounded; total += ps.ops[t].wounded; }
     if (!total) throw new GameError('Нет раненых операторов');
     const medic = ps.p.skills.medic ?? 0;
-    const cost = recoveryCost(counts, medic);
+    const recMod = Math.min(0.7, Math.max(-0.5, playerMods(ps, now).recovery));
+    const base = recoveryCost(counts, medic);
+    const cost = { supplies: Math.round((base.supplies ?? 0) * (1 - recMod)) };
     spend(ps, cost);
     for (const t of OPERATOR_TYPES) if (counts[t]) { ps.ops[t].wounded -= counts[t]!; ps.ops[t].recovering += counts[t]!; }
-    const t = recoveryTime(total, medic);
+    const t = Math.round(recoveryTime(total, medic) * (1 - recMod));
     await addJob(c, ps, 'recovery', 'recover', { counts }, cost, t, now);
     return `Восстановление ${total} операторов: ${fmt(t)}`;
   },
@@ -246,6 +255,7 @@ export const ACTIONS: Record<string, Handler> = {
     const ul = sectorUnlocked(ps, sector.id);
     if (!ul.ok) throw new GameError(`Сектор закрыт: ${ul.why}`);
     const mission = oneOf(a.mission, SECTOR_MISSIONS[sector.type], 'задание') as MissionType;
+    if (mission === 'expedition' && ps.p.cmd_level < 2) throw new GameError('Экспедиции открываются со 2 уровня командира');
     const sec = sectorState(ps, sector.id);
     if (sec.recon < MISSIONS[mission].minRecon) throw new GameError(`Нужна разведанность сектора от ${MISSIONS[mission].minRecon}% — сначала проведите разведку`);
     if (ps.expeditions.length >= expeditionSlots(ps)) throw new GameError('Все слоты походов заняты — дождитесь возвращения группы');
@@ -277,7 +287,10 @@ export const ACTIONS: Record<string, Handler> = {
       vehicle: { type: vType, level: v.level },
       equipment: eq.map((e) => ({ id: e.id, type: e.type as EquipmentType, rarity: e.rarity as Rarity, level: e.level })),
       skills: ps.p.skills, commsLevel: ps.buildings.comms, sectorRecon: sec.recon,
+      bonus: undefined as ReturnType<typeof dispatchBonus> | undefined,
     };
+    const chosen = pickSoldiers(ps, group);
+    input.bonus = dispatchBonus(ps, sector.id, now, chosen.map((x) => ({ type: x.type, level: x.level, trait: x.trait })));
     const plan = planExpedition(input);
     if (plan.size < 1) throw new GameError('В группе должен быть хотя бы один оператор');
     if (plan.size > plan.capacity) throw new GameError(`Вместимость группы — ${plan.capacity} операторов`);
@@ -298,7 +311,12 @@ export const ACTIONS: Record<string, Handler> = {
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,to_timestamp($11/1000.0),to_timestamp($12/1000.0)) RETURNING id`,
       [ps.userId, sector.id, mission, JSON.stringify(group), vType, JSON.stringify(ids), JSON.stringify(plan.cost), JSON.stringify(plan), JSON.stringify(result), seed, now, end],
     );
-    ps.expeditions.push({ id: r.rows[0].id, sector_id: sector.id, mission, group_comp: group, vehicle: vType, equipment: ids, cost: plan.cost, plan, result, start_at: now, end_at: end, status: 'active' });
+    ps.expeditions.push({ id: r.rows[0].id, sector_id: sector.id, mission, group_comp: group, vehicle: vType, equipment: ids, cost: plan.cost, plan, result, start_at: now, end_at: end, status: 'active', seed } as any);
+    for (const so of chosen) {
+      so.status = 'mission';
+      so.expedition_id = r.rows[0].id;
+      so.dirty = true;
+    }
     bumpStat(ps, 'expeditionsSent');
     bumpDaily(ps, now, 'dispatch');
     if (mission === 'recon') bumpDaily(ps, now, 'recon');
@@ -345,6 +363,81 @@ export const ACTIONS: Record<string, Handler> = {
     ps.p.chevron = key;
     return `Теперь на рукаве: «${ch.name}»`;
   },
+
+  /* ── Исследования ── */
+  async research(c, ps, a, now) {
+    const def = researchByKey(String(a.key ?? ''));
+    if (!def) throw new GameError('Нет такого исследования');
+    if (ps.research.has(def.key)) throw new GameError('Уже изучено');
+    if (ps.jobs.some((j) => j.queue === 'research')) throw new GameError('Лаборатория занята — одно исследование за раз');
+    const pre = researchPrereq(def);
+    if (pre && !ps.research.has(pre)) throw new GameError(`Сначала изучите «${researchByKey(pre)!.name}»`);
+    const tier = RESEARCH_COST[def.tier];
+    if (ps.buildings.comms < tier.comms) throw new GameError(`Нужен узел связи ${tier.comms} уровня`);
+    spend(ps, tier.cost);
+    await addJob(c, ps, 'research', 'research', { key: def.key }, tier.cost, tier.time, now);
+    return `Исследование «${def.name}» начато`;
+  },
+
+  /* ── Серия входов и контракты ── */
+  async claimStreak(_c, ps, _a, now) {
+    const day = gameDay(now);
+    if (ps.meta.streakClaimedDay === day) throw new GameError('Сегодняшняя награда уже получена');
+    const r = streakReward(ps.meta.streak);
+    grant(ps, r);
+    ps.meta.streakClaimedDay = day;
+    return `День ${ps.meta.streak} подряд: получено ${costText(r)}`;
+  },
+  async claimContract(_c, ps, a, now) {
+    const idx = int(a.index, 0, 2, 'контракт');
+    const list = weeklyContracts(ps.userId, weekIndex(now), ps.p.cmd_level, ps.companyId != null);
+    const ct = list[idx];
+    if (!ct) throw new GameError('Нет такого контракта');
+    if (ps.weekly.claimed[idx]) throw new GameError('Награда уже получена');
+    if ((ps.weekly.counters[ct.counter] ?? 0) < ct.target) throw new GameError('Контракт ещё не выполнен');
+    ps.weekly.claimed[idx] = true;
+    grant(ps, ct.reward);
+    addPoints(ps, 10);
+    return `Контракт выполнен: ${costText(ct.reward)}`;
+  },
+
+  /* ── Престиж ── */
+  async prestige(c, ps) {
+    if (ps.p.cmd_level < PRESTIGE_LEVEL) throw new GameError(`Престиж доступен командиру ${PRESTIGE_LEVEL} уровня`);
+    if (ps.meta.prestige >= PRESTIGE_MAX) throw new GameError('Достигнут максимальный престиж');
+    if (ps.expeditions.length || ps.jobs.length) throw new GameError('Сначала дождитесь возвращения групп и окончания всех очередей');
+    ps.meta.prestige++;
+    bumpStat(ps, 'prestige');
+    for (const k of Object.keys(ps.buildings) as BuildingKey[]) ps.buildings[k] = 1;
+    for (const t of OPERATOR_TYPES) {
+      const o = ps.ops[t];
+      const keep = OPERATORS[t].award ? o.available + o.wounded + o.recovering : 0;
+      ps.ops[t] = { ...o, available: keep + (START_OPERATORS[t] ?? 0), wounded: 0, recovering: 0, on_mission: 0, rank: 1 };
+    }
+    for (const v of VEHICLE_TYPES) if (ps.vehicles[v] && !VEHICLES[v].award && v !== 'moto') delete ps.vehicles[v];
+    await c.query(`DELETE FROM vehicles WHERE user_id=$1 AND type <> ALL($2)`, [ps.userId, Object.keys(ps.vehicles)]);
+    if (ps.vehicles.moto) ps.vehicles.moto = { level: 1, status: 'ready' };
+    await c.query('DELETE FROM sectors WHERE user_id=$1', [ps.userId]);
+    ps.sectors = {};
+    for (const r of RES_KEYS) ps.p[r] = START_RESOURCES[r];
+    ps.p.cmd_xp = 0;
+    ps.p.cmd_level = 1;
+    ps.p.skills = {};
+    ps.p.free_reset_used = false;
+    return `Полигон переведён на новый рубеж! Престиж ${ps.meta.prestige}: производство и награды +${5 * ps.meta.prestige}%, сила +${2 * ps.meta.prestige}%`;
+  },
+
+  /* ── Привязка к сайту «Учёт дронов» ── */
+  async linkCode(_c, ps, _a, now) {
+    const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    let code = '';
+    for (let i = 0; i < 8; i++) code += alphabet[crypto.randomInt(alphabet.length)];
+    ps.meta.linkCode = code;
+    ps.meta.linkCodeExp = now + 30 * 60_000;
+    return { message: 'Код привязки создан — введите его на сайте «Учёт дронов» в течение 30 минут', data: { code } };
+  },
+
+  ...SOCIAL_ACTIONS,
 
   /* ── Прочее ── */
   async claimDaily(_c, ps, a, now) {

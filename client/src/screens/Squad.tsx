@@ -12,6 +12,7 @@ import { Button, CostLine, Sprite, fmtLong, useAffordable } from '../ui';
 import { JobRow } from '../components/Queues';
 import { Icon } from '../art/icons';
 import { Speech, VehicleArt } from '../art/art';
+import { Memorial, SoldierRoster } from './Long';
 
 type SubTab = 'operators' | 'vehicles' | 'equipment';
 
@@ -184,11 +185,13 @@ function Operators() {
                     </div>
                   )
                 )}
+                <SoldierRoster type={t} />
               </div>
             </article>
           );
         })}
       </div>
+      <Memorial />
     </>
   );
 }
