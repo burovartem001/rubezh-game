@@ -6,7 +6,7 @@ import {
   recoveryCost, recoveryTime, trainTime, vehicleBonusText, vehicleRepairCost, vehicleUpgradeCost, vehicleUpgradeRequiredWorkshop, vehicleUpgradeTime,
 } from '../../../shared/config';
 import { EMPTY, EQUIPMENT_LORE, OPERATOR_LORE, VEHICLE_LORE } from '../../../shared/lore';
-import { AWARD_SOURCE_NAME } from '../../../shared/config';
+import { AWARD_EQUIPMENT, AWARD_SOURCE_NAME } from '../../../shared/config';
 import { useGame } from '../game';
 import { Button, CostLine, Sprite, fmtLong, useAffordable } from '../ui';
 import { JobRow } from '../components/Queues';
@@ -346,6 +346,34 @@ function Equipment() {
           );
         })}
       </div>
+
+      <section className="panel awards-panel">
+        <h2>
+          <Icon name="medal" size={20} /> Наградное оснащение · {AWARD_EQUIPMENT.filter((t) => state.equipment.some((e) => e.type === t)).length}/{AWARD_EQUIPMENT.length}
+        </h2>
+        <p className="muted small">
+          Чуть сильнее стандартного. Не собирается в мастерской и не разбирается — выдаётся за особые заслуги, {AWARD_SOURCE_NAME}.
+        </p>
+        <div className="eq-grid">
+          {AWARD_EQUIPMENT.map((t) => {
+            const n = state.equipment.filter((e) => e.type === t).length;
+            return (
+              <div key={t} className={`eq-card rarity-award ${n ? '' : 'not-owned'}`}>
+                <div className="eq-top">
+                  <span className="eq-icon"><Icon name={t} size={28} /></span>
+                  <span>
+                    <b>{EQUIPMENT[t].name}</b>
+                    <span className="tag r-award"><Icon name="medal" size={12} /> Наградной</span>
+                  </span>
+                </div>
+                <p className="tiny muted">{EQUIPMENT_LORE[t]}</p>
+                <p className="small amber">{equipmentEffectText(t, 'award', 1)}</p>
+                <span className={`award-state ${n ? 'on' : ''}`}>{n ? (n > 1 ? `на складе ×${n}` : 'на складе') : 'ещё не выдано'}</span>
+              </div>
+            );
+          })}
+        </div>
+      </section>
 
       <section className="panel workshop">
         <h2><Icon name="workshop" size={20} /> Мастерская Бати · {ws} ур.</h2>

@@ -530,3 +530,6 @@ h2 .ico, h3 .ico { color: var(--amber); margin-right: 2px; }
 .award-state.on { background: #c99a3b; color: #2b1f08; }
 .award-history { list-style: none; padding: 0; margin: 6px 0 0; display: grid; gap: 4px; font-size: 0.86rem; }
 .award-history .ico { color: #f6dc8a; }
+.eq-card.not-owned { opacity: 0.78; border-style: dashed; }
+.eq-card.not-owned .eq-icon { filter: grayscale(0.6) brightness(0.8); box-shadow: none; }
+.eq-card .award-state { align-self: flex-start; margin-top: 6px; }
