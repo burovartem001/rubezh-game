@@ -1,13 +1,16 @@
 import React, { useEffect, useState } from 'react';
 import {
   AWARDS, AWARD_KEYS, AWARD_SOURCE_NAME, AwardKey, OPERATORS, OperatorType, VEHICLES, VehicleType, equipmentEffectText,
-  BRANCH_NAMES, Branch, COMMANDER_MAX_LEVEL, INSIGNIA, PORTRAITS, RESPEC_COST_DATA, SKILLS, SKILL_KEYS, XP_THRESHOLDS, branchPoints, spentPoints,
+  BRANCH_NAMES, Branch, COMMANDER_MAX_LEVEL, PORTRAITS, RESPEC_COST_DATA, SKILLS, SKILL_KEYS, XP_THRESHOLDS, branchPoints, spentPoints,
 } from '../../../shared/config';
 import { COMMANDER_TITLES } from '../../../shared/lore';
 import { useGame } from '../game';
 import { Bar, Button, Sprite } from '../ui';
 import { Icon } from '../art/icons';
 import { RankBadge, Speech } from '../art/art';
+import { Chevron } from '../art/Chevron';
+import { chevronByKey } from '../../../shared/chevrons';
+import { ChevronsTab, MatesTab, chevronColor } from './Mates';
 
 const BRANCH_DESC: Record<Branch, { text: string; icon: string }> = {
   command: { text: 'Больше бойцов в группе, меньше потерь, лишний поход одновременно.', icon: 'commander' },
@@ -22,18 +25,46 @@ const STATS: [string, string, string][] = [
   ['lostTotal', 'skull', 'потеряно'],
 ];
 
+type CmdTab = 'profile' | 'chevrons' | 'mates';
+
 export function CommanderScreen() {
+  const { state } = useGame();
+  const [tab, setTab] = useState<CmdTab>('profile');
+  const tabs: [CmdTab, string, string, number | string][] = [
+    ['profile', 'Профиль', 'commander', ''],
+    ['chevrons', 'Шевроны', 'medal', state.chevrons.length],
+    ['mates', 'Сослуживцы', 'squad', ''],
+  ];
+  return (
+    <>
+      <div className="seg big icons" role="tablist">
+        {tabs.map(([k, n, ic, c]) => (
+          <button key={k} role="tab" aria-selected={tab === k} className={tab === k ? 'on' : ''} onClick={() => setTab(k)}>
+            <Icon name={ic} size={20} />
+            <span>{n}</span>
+            {c !== '' && <em>{c}</em>}
+          </button>
+        ))}
+      </div>
+      {tab === 'profile' && <ProfileTab onChevrons={() => setTab('chevrons')} />}
+      {tab === 'chevrons' && <ChevronsTab />}
+      {tab === 'mates' && <MatesTab />}
+    </>
+  );
+}
+
+function ProfileTab({ onChevrons }: { onChevrons: () => void }) {
   const { state, act, logout } = useGame();
   const c = state.commander;
   const free = c.level - 1 - spentPoints(c.skills);
   const nextXp = c.level < COMMANDER_MAX_LEVEL ? XP_THRESHOLDS[c.level] : null;
   const prevXp = XP_THRESHOLDS[c.level - 1];
   const [edit, setEdit] = useState(false);
-  const ins = INSIGNIA[state.player.insignia] ?? INSIGNIA[0];
+  const color = chevronColor(state.player.chevron);
   return (
     <>
       <section className="cmd-hero">
-        <div className="cmd-portrait" style={{ borderColor: ins.color }}>
+        <div className="cmd-portrait" style={{ borderColor: color }}>
           <Sprite img="operators" index={state.player.portrait % 4} className="portrait big" focusY={12} />
         </div>
         <div className="cmd-info">
@@ -55,10 +86,14 @@ export function CommanderScreen() {
             )}
           </div>
           <button className="btn secondary small" onClick={() => setEdit((e) => !e)}>
-            <Icon name="settings" size={16} /> {edit ? 'Скрыть' : 'Портрет и шеврон'}
+            <Icon name="settings" size={16} /> {edit ? 'Скрыть' : 'Позывной и портрет'}
           </button>
         </div>
-        <RankBadge level={c.level} size={84} color={ins.color} />
+        <button className="worn-chevron" onClick={onChevrons} aria-label="Шевроны">
+          <Chevron def={state.player.chevron} size={78} />
+          <span>на рукаве</span>
+        </button>
+        <RankBadge level={c.level} size={64} color={color} />
       </section>
       {free > 0 ? (
         <Speech who="sova">
@@ -222,7 +257,7 @@ function AwardsShowcase() {
           <ul className="award-history">
             {state.awards.slice(0, 10).map((a) => (
               <li key={a.id}>
-                <Icon name="medal" size={14} /> <b>{AWARDS[a.award]?.name ?? a.award}</b>
+                <Icon name="medal" size={14} /> <b>{AWARDS[a.award as AwardKey]?.name ?? (chevronByKey(a.award) ? `шеврон «${chevronByKey(a.award)!.name}»` : a.award)}</b>
                 {a.count > 1 ? ` ×${a.count}` : ''}
                 {a.reason ? ` — ${a.reason}` : ''} <span className="muted tiny">{new Date(a.at).toLocaleDateString('ru-RU')}</span>
               </li>
@@ -239,11 +274,10 @@ function ProfileEditor({ onDone }: { onDone: () => void }) {
   const [callsign, setCallsign] = useState(state.player.callsign);
   const [name, setName] = useState(state.player.commanderName);
   const [portrait, setPortrait] = useState(state.player.portrait);
-  const [insignia, setInsignia] = useState(state.player.insignia);
   return (
     <section className="panel">
       <h2>
-        <Icon name="settings" size={20} /> Портрет и шеврон
+        <Icon name="settings" size={20} /> Позывной и портрет
       </h2>
       <label>
         Позывной
@@ -262,15 +296,7 @@ function ProfileEditor({ onDone }: { onDone: () => void }) {
           </button>
         ))}
       </div>
-      <h3>Шеврон</h3>
-      <div className="chips">
-        {INSIGNIA.map((s, i) => (
-          <button key={s.name} className={`chip ${insignia === i ? 'on' : ''}`} onClick={() => setInsignia(i)}>
-            <span className="swatch" style={{ background: s.color }} /> {s.name}
-          </button>
-        ))}
-      </div>
-      <Button onClick={async () => (await act('profile', { callsign, commanderName: name, portrait, insignia })) && onDone()}>
+      <Button onClick={async () => (await act('profile', { callsign, commanderName: name, portrait })) && onDone()}>
         <Icon name="check" size={16} /> Сохранить
       </Button>
     </section>

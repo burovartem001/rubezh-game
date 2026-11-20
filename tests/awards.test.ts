@@ -31,9 +31,9 @@ test('награды за заслуги: выдача, защита от пов
   assert.equal((await integ('awards', undefined, 'wrong-key-wrong-key')).status, 401);
   const cat = await integ('awards');
   assert.equal(cat.status, 200);
-  assert.equal(cat.body.awards.length, 8);
+  assert.equal(cat.body.awards.filter((a: any) => a.kind !== 'chevron').length, 8);
 
-  for (const a of cat.body.awards) {
+  for (const a of cat.body.awards.filter((x: any) => x.kind !== 'chevron')) {
     const g = await integ('award', { login, award: a.key, reason: 'тест', externalId: `t-${login}-${a.key}` });
     assert.equal(g.status, 200, JSON.stringify(g.body));
     assert.equal(g.body.duplicate, false);

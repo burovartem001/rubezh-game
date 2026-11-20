@@ -17,7 +17,8 @@
     "typecheck": "tsc -p tsconfig.server.json --noEmit && tsc -p tsconfig.client.json --noEmit",
     "test": "tsx --test tests/calc.test.ts",
     "test:api": "tsx --test tests/api.test.ts",
-    "test:awards": "tsx --test tests/awards.test.ts"
+    "test:awards": "tsx --test tests/awards.test.ts",
+    "test:chevrons": "tsx --test tests/chevrons.test.ts"
   },
   "dependencies": {
     "express": "^5.1.0",

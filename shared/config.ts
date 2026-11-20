@@ -569,13 +569,6 @@ export function spentPoints(skills: Skills): number {
 }
 
 export const PORTRAITS = ['Сокол', 'Ветер', 'Гранит', 'Полынь'];
-export const INSIGNIA = [
-  { name: 'Янтарный', color: '#edbb76' },
-  { name: 'Оливковый', color: '#8fa77d' },
-  { name: 'Стальной', color: '#799ca1' },
-  { name: 'Песочный', color: '#e6ddc9' },
-];
-
 /* ───────────────────────────── Карта и задания ───────────────────────────── */
 
 export type SectorType = 'observation' | 'warehouse' | 'stronghold' | 'route' | 'event';

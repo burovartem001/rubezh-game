@@ -44,6 +44,7 @@ import {
   storageCap,
 } from '../../../shared/config.js';
 import type { ExpeditionResult, Group, Plan } from '../../../shared/calc.js';
+import { CHEVRONS, ChevronProgress, START_CHEVRONS, chevronByKey, chevronEarned } from '../../../shared/chevrons.js';
 import type { Db } from '../db.js';
 
 export class GameError extends Error {
@@ -66,7 +67,7 @@ export interface Notice { kind: 'info' | 'success' | 'warn'; text: string }
 export interface PS {
   userId: number;
   p: {
-    callsign: string; commander_name: string; portrait: number; insignia: number;
+    callsign: string; commander_name: string; portrait: number; chevron: string;
     supplies: number; parts: number; fuel: number; data: number; res_updated_at: number;
     tutorial_step: number; cmd_xp: number; cmd_level: number; skills: Skills; free_reset_used: boolean; stats: Record<string, number>;
   };
@@ -80,7 +81,9 @@ export interface PS {
   daily: { day: string; counters: Partial<Record<DailyKey, number>>; claimed: Partial<Record<DailyKey, boolean>> };
   notices: Notice[];
   awards: AwardRow[];
-  newAwards: { award: AwardKey; count: number; reason: string }[];
+  newAwards: { award: string; count: number; reason: string }[];
+  chevrons: { key: string; source: string; at: number }[];
+  newChevrons: string[];
 }
 
 const ms = (d: Date | string) => new Date(d).getTime();
@@ -96,13 +99,14 @@ export async function createPlayer(c: Db, userId: number, callsign: string, comm
   for (const k of BUILDING_KEYS) await c.query('INSERT INTO buildings(user_id,key,level) VALUES ($1,$2,1)', [userId, k]);
   for (const t of OPERATOR_TYPES) await c.query('INSERT INTO operators(user_id,type,available) VALUES ($1,$2,$3)', [userId, t, START_OPERATORS[t]]);
   await c.query(`INSERT INTO vehicles(user_id,type,level,status) VALUES ($1,'moto',1,'ready')`, [userId]);
+  for (const k of START_CHEVRONS) await c.query(`INSERT INTO player_chevrons(user_id,chevron,source) VALUES ($1,$2,'start')`, [userId, k]);
 }
 
 export async function loadState(c: Db, userId: number): Promise<PS> {
   const pr = await c.query('SELECT * FROM players WHERE user_id=$1 FOR UPDATE', [userId]);
   if (!pr.rowCount) throw new GameError('Игрок не найден');
   const r = pr.rows[0];
-  const [b, o, v, e, j, s, x, d, aw] = await Promise.all([
+  const [b, o, v, e, j, s, x, d, aw, ch] = await Promise.all([
     c.query('SELECT key, level FROM buildings WHERE user_id=$1', [userId]),
     c.query('SELECT * FROM operators WHERE user_id=$1', [userId]),
     c.query('SELECT type, level, status FROM vehicles WHERE user_id=$1', [userId]),
@@ -112,11 +116,12 @@ export async function loadState(c: Db, userId: number): Promise<PS> {
     c.query(`SELECT * FROM expeditions WHERE user_id=$1 AND status='active' ORDER BY end_at, id`, [userId]),
     c.query('SELECT day::text AS day, counters, claimed FROM daily WHERE user_id=$1 ORDER BY day DESC LIMIT 1', [userId]),
     c.query('SELECT id, award, count, reason, source, seen, created_at FROM awards WHERE user_id=$1 ORDER BY created_at DESC, id DESC LIMIT 100', [userId]),
+    c.query('SELECT chevron, source, created_at FROM player_chevrons WHERE user_id=$1 ORDER BY created_at, chevron', [userId]),
   ]);
   const ps: PS = {
     userId,
     p: {
-      callsign: r.callsign, commander_name: r.commander_name, portrait: r.portrait, insignia: r.insignia,
+      callsign: r.callsign, commander_name: r.commander_name, portrait: r.portrait, chevron: r.chevron,
       supplies: r.supplies, parts: r.parts, fuel: r.fuel, data: r.data, res_updated_at: ms(r.res_updated_at),
       tutorial_step: r.tutorial_step, cmd_xp: r.cmd_xp, cmd_level: r.cmd_level, skills: r.skills, free_reset_used: r.free_reset_used, stats: r.stats,
     },
@@ -131,6 +136,8 @@ export async function loadState(c: Db, userId: number): Promise<PS> {
     notices: [],
     awards: aw.rows.map((r) => ({ ...r, created_at: ms(r.created_at) })),
     newAwards: [],
+    chevrons: ch.rows.map((row) => ({ key: row.chevron, source: row.source, at: ms(row.created_at) })),
+    newChevrons: [],
   };
   for (const k of BUILDING_KEYS) ps.buildings[k] ??= 1;
   for (const t of OPERATOR_TYPES) ps.ops[t] ??= { available: 0, on_mission: 0, wounded: 0, recovering: 0, lost_total: 0, trained: 0, rank: 1 };
@@ -140,10 +147,10 @@ export async function loadState(c: Db, userId: number): Promise<PS> {
 export async function saveState(c: Db, ps: PS) {
   const p = ps.p;
   await c.query(
-    `UPDATE players SET callsign=$2, commander_name=$3, portrait=$4, insignia=$5, supplies=$6, parts=$7, fuel=$8, data=$9,
+    `UPDATE players SET callsign=$2, commander_name=$3, portrait=$4, chevron=$5, supplies=$6, parts=$7, fuel=$8, data=$9,
        res_updated_at=to_timestamp($10/1000.0), tutorial_step=$11, cmd_xp=$12, cmd_level=$13, skills=$14, free_reset_used=$15, stats=$16
      WHERE user_id=$1`,
-    [ps.userId, p.callsign, p.commander_name, p.portrait, p.insignia, p.supplies, p.parts, p.fuel, p.data, p.res_updated_at,
+    [ps.userId, p.callsign, p.commander_name, p.portrait, p.chevron, p.supplies, p.parts, p.fuel, p.data, p.res_updated_at,
       p.tutorial_step, p.cmd_xp, p.cmd_level, JSON.stringify(p.skills), p.free_reset_used, JSON.stringify(p.stats)],
   );
   for (const k of BUILDING_KEYS) await c.query('UPDATE buildings SET level=$3 WHERE user_id=$1 AND key=$2', [ps.userId, k, ps.buildings[k]]);
@@ -268,7 +275,7 @@ export async function addEquipment(c: Db, ps: PS, type: EquipmentType, rarity: R
 
 /* ───────────── награды за заслуги ───────────── */
 
-export interface AwardRow { id: number; award: AwardKey; count: number; reason: string; source: string; seen: boolean; created_at: number }
+export interface AwardRow { id: number; award: string; count: number; reason: string; source: string; seen: boolean; created_at: number }
 
 /** Выдаёт награду из каталога: бойца, транспорт или предмет оснащения. Повторный транспорт повышает его уровень. */
 export async function applyAward(c: Db, ps: PS, key: AwardKey, count: number): Promise<string> {
@@ -288,6 +295,41 @@ export async function applyAward(c: Db, ps: PS, key: AwardKey, count: number): P
   }
   out.push(`${def.name}${count > 1 ? ` ×${count}` : ''}`);
   return out.join(', ');
+}
+
+export function awardName(key: string): string {
+  return AWARDS[key as AwardKey]?.name ?? (chevronByKey(key) ? `шеврон «${chevronByKey(key)!.name}»` : key);
+}
+
+/** Добавляет шеврон в коллекцию (повтор игнорируется). */
+export async function grantChevron(c: Db, ps: PS, key: string, source: string): Promise<boolean> {
+  if (ps.chevrons.some((x) => x.key === key)) return false;
+  const r = await c.query('INSERT INTO player_chevrons(user_id,chevron,source) VALUES ($1,$2,$3) ON CONFLICT DO NOTHING', [ps.userId, key, source]);
+  if (!r.rowCount) return false;
+  ps.chevrons.push({ key, source, at: Date.now() });
+  return true;
+}
+
+export function chevronProgressOf(ps: PS): ChevronProgress {
+  return {
+    stats: ps.p.stats,
+    level: ps.p.cmd_level,
+    tutorialDone: ps.p.tutorial_step >= TUTORIAL.length,
+    controlled: Object.values(ps.sectors).filter((x) => x.control >= 100).length,
+    trained: OPERATOR_TYPES.reduce((s, t) => s + ps.ops[t].trained, 0),
+  };
+}
+
+/** Открывает шевроны за достижения, условия которых выполнены. */
+export async function checkChevrons(c: Db, ps: PS) {
+  const prog = chevronProgressOf(ps);
+  for (const ch of CHEVRONS) {
+    if (ch.category !== 'game' || !chevronEarned(ch, prog)) continue;
+    if (await grantChevron(c, ps, ch.key, 'game')) {
+      ps.newChevrons.push(ch.key);
+      ps.notices.push({ kind: 'success', text: `Новый шеврон: «${ch.name}»` });
+    }
+  }
 }
 
 /* ───────────── досчёт времени ───────────── */
@@ -312,12 +354,13 @@ export async function settle(c: Db, ps: PS, now: number, opts: { showAwards?: bo
     for (const a of unseen.reverse()) {
       a.seen = true;
       ps.newAwards.push({ award: a.award, count: a.count, reason: a.reason });
-      ps.notices.push({ kind: 'success', text: `Награда за заслуги: ${AWARDS[a.award]?.name ?? a.award}${a.count > 1 ? ` ×${a.count}` : ''}${a.reason ? ` — ${a.reason}` : ''}` });
+      ps.notices.push({ kind: 'success', text: `Награда за заслуги: ${awardName(a.award)}${a.count > 1 ? ` ×${a.count}` : ''}${a.reason ? ` — ${a.reason}` : ''}` });
     }
   }
   ps.jobs = ps.jobs.filter((j) => !j.done);
   ps.expeditions = ps.expeditions.filter((x) => x.status === 'active');
   await checkTutorial(c, ps);
+  await checkChevrons(c, ps);
 }
 
 async function completeJob(c: Db, ps: PS, job: JobRow, t: number) {
@@ -426,7 +469,11 @@ async function completeExpedition(c: Db, ps: PS, x: ExpRow, t: number) {
   if (res.equipmentDrop) dropText = await addEquipment(c, ps, res.equipmentDrop.type, res.equipmentDrop.rarity, `Сектор ${String(x.sector_id).padStart(2, '0')}`);
 
   bumpStat(ps, 'expeditionsDone');
-  if (res.outcome === 'success' || res.outcome === 'decisive') bumpStat(ps, 'expeditionsWon');
+  if (res.outcome === 'success' || res.outcome === 'decisive') {
+    bumpStat(ps, 'expeditionsWon');
+    bumpStat(ps, `won_${x.mission}`);
+    if (res.totalWounded + res.totalLost + res.totalFieldRecovered === 0) bumpStat(ps, 'flawless');
+  }
   bumpStat(ps, 'woundedTotal', res.totalWounded);
   bumpStat(ps, 'lostTotal', res.totalLost);
 
@@ -507,7 +554,7 @@ export function view(ps: PS, now: number) {
       callsign: ps.p.callsign,
       commanderName: ps.p.commander_name,
       portrait: ps.p.portrait,
-      insignia: ps.p.insignia,
+      chevron: ps.p.chevron,
     },
     resources: { supplies: ps.p.supplies, parts: ps.p.parts, fuel: ps.p.fuel, data: ps.p.data },
     resAt: ps.p.res_updated_at,
@@ -537,6 +584,8 @@ export function view(ps: PS, now: number) {
     notices: ps.notices,
     awards: ps.awards.map((a) => ({ id: a.id, award: a.award, count: a.count, reason: a.reason, at: a.created_at })),
     newAwards: ps.newAwards,
+    chevrons: ps.chevrons,
+    newChevrons: ps.newChevrons,
   };
 }
 export type StateView = ReturnType<typeof view>;

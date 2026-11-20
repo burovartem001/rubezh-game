@@ -13,6 +13,7 @@ import { QueuesSheet, activeTimers } from './components/Queues';
 import { resShort } from './ui';
 import { Icon } from './art/icons';
 import { Burst, Drone, Speech } from './art/art';
+import { chevronByKey } from '../../shared/chevrons';
 
 export function App() {
   const [state, setState] = useState<GameState | null>(null);
@@ -96,21 +97,24 @@ const TABS: { key: Tab; name: string; icon: string }[] = [
 function Shell() {
   const { state, nav, go, offline } = useGame();
   const [queues, setQueues] = useState(false);
-  const [burst, setBurst] = useState<{ title: string; text: string; icon: string } | null>(null);
+  const [burst, setBurst] = useState<{ title: string; text: string; icon: string; chevron?: string } | null>(null);
   const lvl = useRef(state.commander.level);
   const step = useRef(state.tutorialStep);
   useEffect(() => {
     if (state.commander.level > lvl.current) {
       setBurst({ title: `Уровень ${state.commander.level}!`, text: `${COMMANDER_TITLES[state.commander.level - 1]}. Доступно новое очко навыка.`, icon: 'star' });
+    } else if (state.newChevrons?.length) {
+      const c = chevronByKey(state.newChevrons[0]);
+      if (c) setBurst({ title: 'Новый шеврон!', text: `«${c.name}» — теперь в коллекции. Наденьте его в профиле командира, чтобы видели сослуживцы.`, icon: 'medal', chevron: c.key });
     } else if (state.newAwards?.length) {
       const a = state.newAwards[0];
-      setBurst({ title: 'Награда за заслуги!', text: `${AWARDS[a.award]?.name ?? a.award}${a.count > 1 ? ` ×${a.count}` : ''}${a.reason ? ` — ${a.reason}` : ''}. Подарок от сайта «Учёт дронов».`, icon: 'medal' });
+      setBurst({ title: 'Награда за заслуги!', chevron: chevronByKey(a.award) ? a.award : undefined, text: `${AWARDS[a.award as keyof typeof AWARDS]?.name ?? (chevronByKey(a.award) ? `Шеврон «${chevronByKey(a.award)!.name}»` : a.award)}${a.count > 1 ? ` ×${a.count}` : ''}${a.reason ? ` — ${a.reason}` : ''}. Подарок от сайта «Учёт дронов».`, icon: 'medal' });
     } else if (state.tutorialStep === TUTORIAL.length && step.current < TUTORIAL.length) {
       setBurst({ title: 'Обучение пройдено', text: 'Полигон ваш, командир. Дальше — новые секторы и большие цели.', icon: 'flag' });
     }
     lvl.current = state.commander.level;
     step.current = state.tutorialStep;
-  }, [state.commander.level, state.tutorialStep, state.newAwards]);
+  }, [state.commander.level, state.tutorialStep, state.newAwards, state.newChevrons]);
   const freePoints = state.commander.level - 1 - Object.values(state.commander.skills).reduce((s, v) => s + (v ?? 0), 0);
   const badge = (t: Tab) => (t === 'reports' ? state.unreadReports : t === 'commander' ? freePoints : t === 'map' ? state.expeditions.length : 0);
   return (

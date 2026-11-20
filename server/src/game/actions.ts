@@ -10,7 +10,6 @@ import {
   EQUIPMENT_LIMIT,
   EQUIPMENT_TYPES,
   EquipmentType,
-  INSIGNIA,
   MAX_BUILDING_LEVEL,
   MAX_EQUIPMENT_LEVEL,
   MAX_EQUIPMENT_PER_GROUP,
@@ -58,6 +57,7 @@ import {
 } from '../../../shared/config.js';
 import { Group, groupSize, planExpedition, resolveExpedition } from '../../../shared/calc.js';
 import type { Db } from '../db.js';
+import { chevronByKey } from '../../../shared/chevrons.js';
 import {
   GameError,
   PS,
@@ -335,8 +335,15 @@ export const ACTIONS: Record<string, Handler> = {
     ps.p.callsign = callsign;
     ps.p.commander_name = name;
     ps.p.portrait = int(a.portrait ?? ps.p.portrait, 0, PORTRAITS.length - 1, 'портрет');
-    ps.p.insignia = int(a.insignia ?? ps.p.insignia, 0, INSIGNIA.length - 1, 'шеврон');
     return 'Профиль командира сохранён';
+  },
+  async wearChevron(_c, ps, a) {
+    const key = String(a.key ?? '');
+    const ch = chevronByKey(key);
+    if (!ch) throw new GameError('Такого шеврона нет');
+    if (!ps.chevrons.some((x) => x.key === key)) throw new GameError('Этого шеврона ещё нет в коллекции');
+    ps.p.chevron = key;
+    return `Теперь на рукаве: «${ch.name}»`;
   },
 
   /* ── Прочее ── */

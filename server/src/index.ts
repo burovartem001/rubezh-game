@@ -4,9 +4,10 @@ import express, { NextFunction, Request, Response } from 'express';
 import { AuthedRequest, cleanupSessions, login, logout, register, requireAuth } from './auth.js';
 import { Db, migrate, pool, tx } from './db.js';
 import { ACTIONS } from './game/actions.js';
-import { GameError, PS, applyAward, checkTutorial, loadState, saveState, settle, view } from './game/state.js';
+import { GameError, PS, applyAward, checkChevrons, checkTutorial, grantChevron, loadState, saveState, settle, view } from './game/state.js';
 import crypto from 'node:crypto';
 import { AWARDS, AWARD_KEYS, AwardKey } from '../../shared/config.js';
+import { SITE_CHEVRONS, chevronByKey } from '../../shared/chevrons.js';
 import { log } from './log.js';
 import { APP_ROOT } from './root.js';
 
@@ -79,6 +80,7 @@ api.post('/action', requireAuth, async (req: AuthedRequest, res) => {
     } else {
       message = await handler(c, ps, body, now);
       await checkTutorial(c, ps);
+      await checkChevrons(c, ps);
       if (requestId) await c.query('INSERT INTO action_log(user_id,request_id,response) VALUES ($1,$2,$3)', [ps.userId, requestId, JSON.stringify({ message })]);
     }
     await saveState(c, ps);
@@ -94,6 +96,60 @@ api.get('/reports', requireAuth, async (req: AuthedRequest, res) => {
     [req.userId, before],
   );
   res.json({ reports: r.rows.map((x) => ({ id: x.id, createdAt: new Date(x.created_at).getTime(), read: x.is_read, ...x.body })) });
+});
+
+/* ───────── Сослуживцы: список игроков и публичный профиль ─────────
+ * Видно другим: позывной, имя командира, портрет, уровень, носимый шеврон, коллекция шевронов,
+ * награды за заслуги и боевая статистика. Логин и ресурсы не раскрываются.
+ */
+api.get('/players', requireAuth, async (req: AuthedRequest, res) => {
+  const q = String(req.query.q ?? '').trim().slice(0, 40);
+  const r = await pool.query(
+    `SELECT p.user_id, p.callsign, p.commander_name, p.portrait, p.chevron, p.cmd_level, p.cmd_xp,
+            (SELECT count(*)::int FROM player_chevrons pc WHERE pc.user_id = p.user_id) AS chevrons
+       FROM players p
+      WHERE ($1 = '' OR p.callsign ILIKE '%' || $1 || '%' OR p.commander_name ILIKE '%' || $1 || '%')
+      ORDER BY p.cmd_xp DESC, p.user_id
+      LIMIT 50`,
+    [q],
+  );
+  res.json({
+    me: req.userId,
+    players: r.rows.map((x) => ({ id: x.user_id, callsign: x.callsign, commanderName: x.commander_name, portrait: x.portrait, chevron: x.chevron, level: x.cmd_level, xp: x.cmd_xp, chevrons: x.chevrons })),
+  });
+});
+api.get('/players/:id', requireAuth, async (req: AuthedRequest, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id) || id < 1) return res.status(400).json({ error: 'Неверный игрок' });
+  const p = await pool.query('SELECT user_id, callsign, commander_name, portrait, chevron, cmd_level, cmd_xp, stats, created_at FROM players WHERE user_id=$1', [id]);
+  if (!p.rowCount) return res.status(404).json({ error: 'Игрок не найден' });
+  const [ch, aw, sec] = await Promise.all([
+    pool.query('SELECT chevron, source, created_at FROM player_chevrons WHERE user_id=$1 ORDER BY created_at, chevron', [id]),
+    pool.query('SELECT award, count, created_at FROM awards WHERE user_id=$1 ORDER BY created_at DESC LIMIT 30', [id]),
+    pool.query('SELECT count(*)::int AS n FROM sectors WHERE user_id=$1 AND control >= 100', [id]),
+  ]);
+  const x = p.rows[0];
+  const st = x.stats ?? {};
+  res.json({
+    id: x.user_id,
+    me: x.user_id === req.userId,
+    callsign: x.callsign,
+    commanderName: x.commander_name,
+    portrait: x.portrait,
+    chevron: x.chevron,
+    level: x.cmd_level,
+    xp: x.cmd_xp,
+    since: new Date(x.created_at).getTime(),
+    chevrons: ch.rows.map((r) => ({ key: r.chevron, source: r.source, at: new Date(r.created_at).getTime() })),
+    awards: aw.rows.map((r) => ({ award: r.award, count: r.count, at: new Date(r.created_at).getTime() })),
+    stats: {
+      expeditionsSent: st.expeditionsSent ?? 0,
+      expeditionsWon: st.expeditionsWon ?? 0,
+      flawless: st.flawless ?? 0,
+      buildsDone: st.buildsDone ?? 0,
+      controlled: sec.rows[0].n,
+    },
+  });
 });
 
 /* ───────── Интеграция с сайтом «Учёт дронов»: выдача наград за заслуги ─────────
@@ -115,7 +171,12 @@ function integrationAuth(req: Request, res: Response, next: NextFunction) {
   next();
 }
 api.get('/integration/awards', integrationAuth, (_req, res) => {
-  res.json({ awards: AWARD_KEYS.map((k) => ({ key: k, kind: AWARDS[k].kind, name: AWARDS[k].name })) });
+  res.json({
+    awards: [
+      ...AWARD_KEYS.map((k) => ({ key: k, kind: AWARDS[k].kind, name: AWARDS[k].name })),
+      ...SITE_CHEVRONS.map((k) => ({ key: k, kind: 'chevron', name: `Шеврон «${chevronByKey(k)!.name}»` })),
+    ],
+  });
 });
 api.post('/integration/award', integrationAuth, async (req, res) => {
   const b = req.body ?? {};
@@ -124,7 +185,8 @@ api.post('/integration/award', integrationAuth, async (req, res) => {
   const count = Number(b.count ?? 1);
   const reason = String(b.reason ?? '').trim().slice(0, 200);
   const externalId = b.externalId == null ? null : String(b.externalId).slice(0, 100);
-  if (!AWARD_KEYS.includes(award)) return res.status(400).json({ error: 'Неизвестная награда', awards: AWARD_KEYS });
+  const isChevron = SITE_CHEVRONS.includes(award);
+  if (!AWARD_KEYS.includes(award) && !isChevron) return res.status(400).json({ error: 'Неизвестная награда', awards: [...AWARD_KEYS, ...SITE_CHEVRONS] });
   if (!Number.isInteger(count) || count < 1 || count > 50) return res.status(400).json({ error: 'count: от 1 до 50' });
   const u = await pool.query('SELECT id FROM users WHERE login=$1', [login]);
   if (!u.rowCount) return res.status(404).json({ error: 'Игрок с таким логином не найден' });
@@ -136,10 +198,17 @@ api.post('/integration/award', integrationAuth, async (req, res) => {
       if (dup.rowCount) return { ok: true, duplicate: true };
     }
     await settle(c, ps, now, { showAwards: false });
-    const text = await applyAward(c, ps, award, count);
+    let text: string;
+    if (isChevron) {
+      if (!(await grantChevron(c, ps, award, 'site'))) {
+        await saveState(c, ps);
+        return { ok: true, duplicate: false, alreadyOwned: true, granted: `шеврон «${chevronByKey(award)!.name}» уже есть у игрока` };
+      }
+      text = `шеврон «${chevronByKey(award)!.name}»`;
+    } else text = await applyAward(c, ps, award, count);
     const r = await c.query(
       `INSERT INTO awards(user_id, award, count, reason, source, external_id) VALUES ($1,$2,$3,$4,'uchet-dronov',$5) RETURNING id`,
-      [ps.userId, award, count, reason, externalId],
+      [ps.userId, award, isChevron ? 1 : count, reason, externalId],
     );
     await saveState(c, ps);
     log.info('award granted', { userId: ps.userId, award, count });

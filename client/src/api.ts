@@ -1,4 +1,4 @@
-import type { Cost, MissionType, Outcome, OperatorType, VehicleType, EquipmentType, Rarity, DailyKey, BuildingKey, Skills, AwardKey } from '../../shared/config';
+import type { Cost, MissionType, Outcome, OperatorType, VehicleType, EquipmentType, Rarity, DailyKey, BuildingKey, Skills } from '../../shared/config';
 import type { Casualties, Reason } from '../../shared/calc';
 
 /* Типы состояния, приходящего с сервера (server/src/game/state.ts → view) */
@@ -16,11 +16,18 @@ export interface Report {
   vehicleDamaged: boolean; rewards: Cost; xp: number; levelUp: number | null; drop: string | null;
   recon: { before: number; after: number }; control: { before: number; after: number }; reasons: Reason[];
 }
+export interface PlayerListItem { id: number; callsign: string; commanderName: string; portrait: number; chevron: string; level: number; xp: number; chevrons: number }
+export interface PublicProfile {
+  id: number; me: boolean; callsign: string; commanderName: string; portrait: number; chevron: string; level: number; xp: number; since: number;
+  chevrons: { key: string; source: string; at: number }[];
+  awards: { award: string; count: number; at: number }[];
+  stats: { expeditionsSent: number; expeditionsWon: number; flawless: number; buildsDone: number; controlled: number };
+}
 export interface Equipment { id: number; type: EquipmentType; rarity: Rarity; level: number; status: 'ready' | 'mission'; source: string }
 export interface SectorState { id: number; recon: number; control: number; attempts: number; successes: number; unlocked: boolean; lockReason: string }
 export interface GameState {
   serverTime: number;
-  player: { callsign: string; commanderName: string; portrait: number; insignia: number };
+  player: { callsign: string; commanderName: string; portrait: number; chevron: string };
   resources: Record<'supplies' | 'parts' | 'fuel' | 'data', number>;
   resAt: number;
   caps: { supplies: number; parts: number; fuel: number; data: null };
@@ -37,8 +44,10 @@ export interface GameState {
   tutorialStep: number;
   daily: { day: string; counters: Partial<Record<DailyKey, number>>; claimed: Partial<Record<DailyKey, boolean>> };
   notices: { kind: 'info' | 'success' | 'warn'; text: string }[];
-  awards: { id: number; award: AwardKey; count: number; reason: string; at: number }[];
-  newAwards: { award: AwardKey; count: number; reason: string }[];
+  awards: { id: number; award: string; count: number; reason: string; at: number }[];
+  newAwards: { award: string; count: number; reason: string }[];
+  chevrons: { key: string; source: string; at: number }[];
+  newChevrons: string[];
   reports: Report[];
   unreadReports: number;
 }
@@ -111,6 +120,8 @@ export const api = {
   logout: () => request('auth/logout', { method: 'POST' }),
   state: () => request<GameState>('state'),
   reports: (before: number) => request<{ reports: Report[] }>(`reports?before=${before}`),
+  players: (q: string) => request<{ me: number; players: PlayerListItem[] }>(`players?q=${encodeURIComponent(q)}`),
+  player: (id: number) => request<PublicProfile>(`players/${id}`),
   /**
    * Игровое действие с идентификатором запроса. При обрыве связи повторяется с тем же идентификатором —
    * сервер не выполнит его дважды и не спишет ресурсы повторно.

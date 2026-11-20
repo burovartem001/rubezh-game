@@ -2,6 +2,7 @@ import React, { useEffect, useRef } from 'react';
 import type { BuildingKey, VehicleType } from '../../../shared/config';
 import { CAST, CastKey } from '../../../shared/lore';
 import { Icon } from './icons';
+import { Chevron } from './Chevron';
 
 /* ───────────── Кадры из панорамы полигона (img/base.jpg, 16:9) ───────────── */
 
@@ -240,7 +241,7 @@ export function Stamp({ text, tone }: { text: string; tone: 'ok' | 'mid' | 'bad'
 
 /* ───────────── Праздничная вспышка ───────────── */
 
-export function Burst({ onDone, title, text, icon = 'star' }: { onDone: () => void; title: string; text: string; icon?: string }) {
+export function Burst({ onDone, title, text, icon = 'star', chevron }: { onDone: () => void; title: string; text: string; icon?: string; chevron?: string }) {
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const t = setTimeout(onDone, 4200);
@@ -253,9 +254,13 @@ export function Burst({ onDone, title, text, icon = 'star' }: { onDone: () => vo
         {Array.from({ length: 14 }, (_, i) => (
           <i key={i} className="spark" style={{ ['--a' as string]: `${(i / 14) * 360}deg`, ['--d' as string]: `${(i % 3) * 0.08}s` }} />
         ))}
-        <div className="burst-icon">
-          <Icon name={icon} size={44} stroke={1.6} />
-        </div>
+        {chevron ? (
+          <div className="burst-chevron"><Chevron def={chevron} size={96} /></div>
+        ) : (
+          <div className="burst-icon">
+            <Icon name={icon} size={44} stroke={1.6} />
+          </div>
+        )}
         <h2>{title}</h2>
         <p>{text}</p>
       </div>
