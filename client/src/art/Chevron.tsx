@@ -21,6 +21,13 @@ export function Chevron({ def, size = 72, dim, className }: { def: ChevronDef | 
   const d = typeof def === 'string' ? chevronByKey(def) : def;
   const uid = useId().replace(/[:]/g, '');
   if (!d) return null;
+  if (d.image) {
+    return (
+      <span className={`chevron patch r-${d.rarity} ${dim ? 'dim' : ''} ${className ?? ''}`} style={{ width: size, height: size * 1.2 }}>
+        <img src={d.image} alt={`Нашивка «${d.name}»`} loading="lazy" draggable={false} />
+      </span>
+    );
+  }
   const path = SHAPES[d.shape];
   const glow = CHEVRON_RARITY_COLORS[d.rarity];
   const motto = d.motto;

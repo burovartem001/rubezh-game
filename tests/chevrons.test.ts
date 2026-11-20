@@ -59,6 +59,21 @@ test('шевроны: старт, надеть, выдача сайтом, до�
   assert.ok(r.body.chevrons.some((c: any) => c.key === 'firstFlight'), 'первый вылет открыт');
   assert.ok(r.body.newChevrons.includes('firstFlight'));
 
+  // неуставные: выдача сайтом (легендарная) и открытие за достижение
+  const g2 = await fetch(`${URL_}/api/integration/award`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${KEY}` },
+    body: JSON.stringify({ login: a.login, award: 'u_kingHearts', externalId: `chev2-${a.login}` }),
+  }).then((x) => x.json() as Promise<any>);
+  assert.equal(g2.ok, true, JSON.stringify(g2));
+  await db.query(`UPDATE players SET stats = stats || '{"failed": 3}'::jsonb WHERE user_id=$1`, [uid]);
+  r = await call(a.token, 'state');
+  assert.ok(r.body.chevrons.some((c: any) => c.key === 'u_kingHearts'), 'неуставная за заслуги');
+  assert.ok(r.body.chevrons.some((c: any) => c.key === 'u_smileRum'), 'неуставная за достижение');
+  assert.ok(!r.body.chevrons.some((c: any) => c.key === 'u_loveIs'), 'без условия не выдаётся');
+  assert.equal((await act(a.token, 'wearChevron', { key: 'u_loveIs' })).status, 400);
+  assert.equal((await act(a.token, 'wearChevron', { key: 'siteProp' })).status, 200);
+
   // другой игрок видит профиль и шевроны
   const list = await call(b.token, `players?q=${encodeURIComponent('Альфа')}`);
   const row = list.body.players.find((p: any) => p.id === uid);

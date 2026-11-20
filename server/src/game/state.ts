@@ -399,6 +399,7 @@ async function completeJob(c: Db, ps: PS, job: JobRow, t: number) {
         o.recovering -= k;
         o.available += k;
         n += k;
+        bumpStat(ps, 'recovered', k);
       }
       ps.notices.push({ kind: 'success', text: `Восстановление завершено: в строй вернулись ${n}` });
       break;
@@ -469,6 +470,9 @@ async function completeExpedition(c: Db, ps: PS, x: ExpRow, t: number) {
   if (res.equipmentDrop) dropText = await addEquipment(c, ps, res.equipmentDrop.type, res.equipmentDrop.rarity, `Сектор ${String(x.sector_id).padStart(2, '0')}`);
 
   bumpStat(ps, 'expeditionsDone');
+  if (res.outcome === 'fail') bumpStat(ps, 'failed');
+  if (res.outcome === 'decisive') bumpStat(ps, 'decisive');
+  if (res.totalFieldRecovered) bumpStat(ps, 'recovered', res.totalFieldRecovered);
   if (res.outcome === 'success' || res.outcome === 'decisive') {
     bumpStat(ps, 'expeditionsWon');
     bumpStat(ps, `won_${x.mission}`);

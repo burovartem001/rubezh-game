@@ -25,6 +25,13 @@ export const CHEVRON_CATEGORIES: { key: ChevronCategory; name: string; text: str
 ];
 
 export type ChevronShape = 'shield' | 'round' | 'hex' | 'tab' | 'diamond' | 'arch';
+
+/** Серии: уставные (нарисованные знаки полигона) и неуставные (нашивки-картинки с юмором). */
+export type ChevronSeries = 'regular' | 'unofficial';
+export const CHEVRON_SERIES: { key: ChevronSeries; name: string; text: string }[] = [
+  { key: 'regular', name: 'Уставные', text: 'Официальные знаки полигона.' },
+  { key: 'unofficial', name: 'Неуставные', text: 'Нашивки «не по уставу» — с юмором и характером. Разной редкости: чем реже, тем труднее получить.' },
+];
 export interface ChevronCondition {
   kind: 'stat' | 'level' | 'tutorial' | 'control' | 'trained';
   key?: string;
@@ -44,9 +51,11 @@ export interface ChevronDef {
   ink: string;
   icon: string; // имя иконки из client/src/art/icons.tsx
   condition?: ChevronCondition;
+  series?: ChevronSeries; // по умолчанию — уставные
+  image?: string; // готовая картинка нашивки (неуставные), путь от корня клиента
 }
 
-/** Все шевроны пока одной редкости — «Обычный». Редкость меняется здесь, интерфейс подхватит. */
+/** Уставные шевроны пока одной редкости — «Обычный»; неуставные — разной. Редкость меняется здесь, интерфейс подхватит. */
 export const CHEVRONS: ChevronDef[] = [
   // ── стартовые
   { key: 'polygon', name: 'Тыловой полигон', motto: 'ПОЛИГОН', category: 'start', rarity: 'common', shape: 'shield', bg: '#4b5a3c', bg2: '#2e3a26', border: '#c9b37a', ink: '#efe3c6', icon: 'base' },
@@ -85,11 +94,38 @@ export const CHEVRONS: ChevronDef[] = [
   { key: 'siteNight', name: 'Ночная смена', motto: 'НОЧНАЯ СМЕНА', category: 'site', rarity: 'common', shape: 'arch', bg: '#1d2340', bg2: '#0f1326', border: '#f6dc8a', ink: '#fff6d6', icon: 'babayaga' },
   { key: 'siteSupport', name: 'Опора взвода', motto: 'ОПОРА', category: 'site', rarity: 'common', shape: 'diamond', bg: '#3a2a40', bg2: '#221828', border: '#f6dc8a', ink: '#fff6d6', icon: 'supply' },
   { key: 'siteVeteran', name: 'Ветеран учёта', motto: 'ВЕТЕРАН', category: 'site', rarity: 'common', shape: 'tab', bg: '#40322a', bg2: '#261d18', border: '#f6dc8a', ink: '#fff6d6', icon: 'medal' },
+
+  // ── неуставные: нашивки-картинки, разная редкость ──
+  // за достижения в игре
+  { key: 'u_smileRum', name: 'Улыбайтесь, это всех раздражает', motto: '', category: 'game', rarity: 'common', series: 'unofficial', image: 'img/patches/smileRum.webp', shape: 'tab', bg: '', bg2: '', border: '#6b7a3c', ink: '', icon: '',
+    condition: { kind: 'stat', key: 'failed', value: 3, text: 'Пережить 3 сорванных задания' } },
+  { key: 'u_medkit', name: 'Аптечка при себе', motto: '', category: 'game', rarity: 'common', series: 'unofficial', image: 'img/patches/medkit.webp', shape: 'tab', bg: '', bg2: '', border: '#6b7a3c', ink: '', icon: '',
+    condition: { kind: 'stat', key: 'recovered', value: 10, text: 'Вернуть в строй 10 раненых' } },
+  { key: 'u_loveIsHug', name: 'Love is (объятия)', motto: '', category: 'game', rarity: 'common', series: 'unofficial', image: 'img/patches/loveIsHug.webp', shape: 'tab', bg: '', bg2: '', border: '#a5503f', ink: '', icon: '',
+    condition: { kind: 'level', value: 3, text: 'Командир 3 уровня' } },
+  { key: 'u_pirateKnife', name: 'Человек как нож', motto: '', category: 'game', rarity: 'rare', series: 'unofficial', image: 'img/patches/pirateKnife.webp', shape: 'tab', bg: '', bg2: '', border: '#2f5aa8', ink: '', icon: '',
+    condition: { kind: 'stat', key: 'expeditionsWon', value: 25, text: '25 успешных походов' } },
+  { key: 'u_remote', name: 'Работаем на удалёнке', motto: '', category: 'game', rarity: 'rare', series: 'unofficial', image: 'img/patches/remote.webp', shape: 'tab', bg: '', bg2: '', border: '#d9902a', ink: '', icon: '',
+    condition: { kind: 'stat', key: 'won_recon', value: 15, text: '15 успешных разведок' } },
+  { key: 'u_rearCovered', name: 'Тыл прикрыт', motto: '', category: 'game', rarity: 'rare', series: 'unofficial', image: 'img/patches/rearCovered.webp', shape: 'tab', bg: '', bg2: '', border: '#a5503f', ink: '', icon: '',
+    condition: { kind: 'stat', key: 'flawless', value: 20, text: '20 успешных походов без потерь' } },
+  { key: 'u_goodGuys', name: 'И собрались все добрые', motto: '', category: 'game', rarity: 'epic', series: 'unofficial', image: 'img/patches/goodGuys.webp', shape: 'tab', bg: '', bg2: '', border: '#e6ddc9', ink: '', icon: '',
+    condition: { kind: 'stat', key: 'won_raid', value: 30, text: '30 успешных рейдов' } },
+  { key: 'u_loveIs', name: 'Love is', motto: '', category: 'game', rarity: 'epic', series: 'unofficial', image: 'img/patches/loveIs.webp', shape: 'tab', bg: '', bg2: '', border: '#c0392b', ink: '', icon: '',
+    condition: { kind: 'stat', key: 'decisive', value: 20, text: '20 решительных успехов' } },
+  // возможно получить за особые заслуги на сайте
+  { key: 'u_onlyNow', name: 'Только сейчас!', motto: '', category: 'site', rarity: 'rare', series: 'unofficial', image: 'img/patches/onlyNow.webp', shape: 'tab', bg: '', bg2: '', border: '#a5503f', ink: '', icon: '' },
+  { key: 'u_kingRedwar', name: 'Король REDWAR', motto: '', category: 'site', rarity: 'epic', series: 'unofficial', image: 'img/patches/kingRedwar.webp', shape: 'tab', bg: '', bg2: '', border: '#c0392b', ink: '', icon: '' },
+  { key: 'u_kingHearts', name: 'Король червей', motto: '', category: 'site', rarity: 'legendary', series: 'unofficial', image: 'img/patches/kingHearts.webp', shape: 'tab', bg: '', bg2: '', border: '#c0392b', ink: '', icon: '' },
+  { key: 'u_madeInRussia', name: 'Made in Russia', motto: '', category: 'site', rarity: 'legendary', series: 'unofficial', image: 'img/patches/madeInRussia.webp', shape: 'tab', bg: '', bg2: '', border: '#a5503f', ink: '', icon: '' },
 ];
 
 export const DEFAULT_CHEVRON = 'polygon';
 export const START_CHEVRONS = CHEVRONS.filter((c) => c.category === 'start').map((c) => c.key);
 export const SITE_CHEVRONS = CHEVRONS.filter((c) => c.category === 'site').map((c) => c.key);
+export function chevronSeries(c: ChevronDef): ChevronSeries {
+  return c.series ?? 'regular';
+}
 export function chevronByKey(key: string): ChevronDef | undefined {
   return CHEVRONS.find((c) => c.key === key);
 }

@@ -581,3 +581,13 @@ h2 .ico, h3 .ico { color: var(--amber); margin-right: 2px; }
   .worn-panel { flex-direction: column; text-align: center; }
   .cmd-hero .rank-badge { display: none; }
 }
+
+/* ── Неуставные нашивки (картинки) ── */
+.chevron.patch { display: inline-flex; align-items: center; justify-content: center; flex: none; filter: none; }
+.chevron.patch img { max-width: 100%; max-height: 100%; object-fit: contain; filter: drop-shadow(0 3px 5px #0009); }
+.chevron.patch.r-rare img { filter: drop-shadow(0 0 6px #79b6c9aa) drop-shadow(0 3px 5px #0009); }
+.chevron.patch.r-epic img { filter: drop-shadow(0 0 8px #b48ce0bb) drop-shadow(0 3px 5px #0009); }
+.chevron.patch.r-legendary img { filter: drop-shadow(0 0 10px #edbb76cc) drop-shadow(0 3px 5px #0009); animation: legend-glow 2.4s ease-in-out infinite; }
+@keyframes legend-glow { 50% { filter: drop-shadow(0 0 16px #f6dc8aee) drop-shadow(0 3px 5px #0009); } }
+.chevron.patch.dim img { filter: grayscale(1) brightness(0.4) blur(0.6px); animation: none; }
+.chev-cat.unofficial .chev-card.got { background: linear-gradient(160deg, #1f2a26, #161f1c); }

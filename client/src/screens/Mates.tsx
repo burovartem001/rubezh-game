@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { AWARDS, TUTORIAL } from '../../../shared/config';
 import {
-  CHEVRONS, CHEVRON_CATEGORIES, CHEVRON_RARITY_COLORS, CHEVRON_RARITY_NAMES, ChevronDef, chevronByKey, chevronProgress,
+  CHEVRONS, CHEVRON_CATEGORIES, CHEVRON_RARITY_COLORS, CHEVRON_RARITY_NAMES, CHEVRON_SERIES, ChevronDef, ChevronSeries, chevronByKey, chevronProgress, chevronSeries,
 } from '../../../shared/chevrons';
 import { COMMANDER_TITLES } from '../../../shared/lore';
 import { PlayerListItem, PublicProfile, api } from '../api';
@@ -28,6 +28,7 @@ const fmtDate = (ms: number) => new Date(ms).toLocaleDateString('ru-RU', { day: 
 export function ChevronsTab() {
   const { state, act } = useGame();
   const [preview, setPreview] = useState(false);
+  const [series, setSeries] = useState<ChevronSeries>('regular');
   const owned = new Map(state.chevrons.map((c) => [c.key, c]));
   const worn = chevronByKey(state.player.chevron);
   const prog = {
@@ -52,11 +53,24 @@ export function ChevronsTab() {
         </div>
       </section>
 
+      <div className="seg big" role="tablist">
+        {CHEVRON_SERIES.map((sr) => {
+          const all = CHEVRONS.filter((c) => chevronSeries(c) === sr.key);
+          return (
+            <button key={sr.key} role="tab" aria-selected={series === sr.key} className={series === sr.key ? 'on' : ''} onClick={() => setSeries(sr.key)}>
+              {sr.name} · {all.filter((c) => owned.has(c.key)).length}/{all.length}
+            </button>
+          );
+        })}
+      </div>
+      <p className="muted small">{CHEVRON_SERIES.find((x) => x.key === series)!.text}</p>
+
       {CHEVRON_CATEGORIES.map((cat) => {
-        const list = CHEVRONS.filter((c) => c.category === cat.key);
+        const list = CHEVRONS.filter((c) => c.category === cat.key && chevronSeries(c) === series);
+        if (!list.length) return null;
         const got = list.filter((c) => owned.has(c.key)).length;
         return (
-          <section key={cat.key} className={`panel chev-cat cat-${cat.key}`}>
+          <section key={cat.key} className={`panel chev-cat cat-${cat.key} ${series === 'unofficial' ? 'unofficial' : ''}`}>
             <div className="between">
               <h2>
                 <Icon name={cat.key === 'site' ? 'medal' : cat.key === 'game' ? 'flag' : 'base'} size={20} /> {cat.name}
@@ -219,12 +233,14 @@ export function ProfileSheet({ id, onClose }: { id: number; onClose: () => void 
           <h3>
             <Icon name="medal" size={18} /> Коллекция шевронов · {p.chevrons.length}/{CHEVRONS.length}
           </h3>
-          {CHEVRON_CATEGORIES.map((cat) => {
-            const have = CHEVRONS.filter((c) => c.category === cat.key && ownedKeys.has(c.key));
+          {CHEVRON_SERIES.flatMap((sr) => CHEVRON_CATEGORIES.map((cat) => ({ sr, cat }))).map(({ sr, cat }) => {
+            const have = CHEVRONS.filter((c) => c.category === cat.key && chevronSeries(c) === sr.key && ownedKeys.has(c.key));
             if (!have.length) return null;
             return (
-              <div key={cat.key} className="pub-cat">
-                <span className="kicker">{cat.name}</span>
+              <div key={sr.key + cat.key} className="pub-cat">
+                <span className="kicker">
+                  {sr.name} · {cat.name}
+                </span>
                 <div className="pub-chevrons">
                   {have.map((c) => (
                     <div key={c.key} className="pub-chev" title={c.name}>
