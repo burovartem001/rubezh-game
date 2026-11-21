@@ -35,6 +35,14 @@ export const CHEVRON_SERIES: { key: ChevronSeries; name: string; text: string }[
   { key: 'regular', name: 'Уставные', text: 'Официальные знаки полигона.' },
   { key: 'unofficial', name: 'Неуставные', text: 'Нашивки «не по уставу» — с юмором и характером. Разной редкости: чем реже, тем труднее получить.' },
 ];
+/** Группы неуставных нашивок — по сюжету картинки. */
+export type UnofficialGroup = 'girls' | 'humor' | 'service';
+export const UNOFFICIAL_GROUPS: { key: UnofficialGroup; name: string; text: string; icon: string }[] = [
+  { key: 'girls', name: 'Боевые подруги', text: 'Пин-ап и портреты: те, кто ждёт, и те, кто сам в строю.', icon: 'heart' },
+  { key: 'humor', name: 'С юмором', text: 'Шутки, мемы и правда жизни — то, что помогает не унывать.', icon: 'sparkle' },
+  { key: 'service', name: 'Служба и обереги', text: 'Про работу, технику, удачу и то, что хранит в пути.', icon: 'flag' },
+];
+
 export interface ChevronCondition {
   kind: 'stat' | 'level' | 'tutorial' | 'control' | 'trained';
   key?: string;
@@ -56,6 +64,7 @@ export interface ChevronDef {
   condition?: ChevronCondition;
   series?: ChevronSeries; // по умолчанию — уставные
   image?: string; // готовая картинка нашивки (неуставные), путь от корня клиента
+  group?: UnofficialGroup; // группа неуставной нашивки
 }
 
 /** Уставные шевроны пока одной редкости — «Обычный»; неуставные — разной. Редкость меняется здесь, интерфейс подхватит. */
@@ -145,27 +154,60 @@ export const CHEVRONS: ChevronDef[] = [
 
   // ── неуставные: нашивки-картинки, разная редкость ──
   // за достижения в игре
-  { key: 'u_smileRum', name: 'Улыбайтесь, это всех раздражает', motto: '', category: 'game', rarity: 'common', series: 'unofficial', image: 'img/patches/smileRum.webp', shape: 'tab', bg: '', bg2: '', border: '#6b7a3c', ink: '', icon: '',
+  { key: 'u_smileRum', name: 'Улыбайтесь, это всех раздражает', motto: '', category: 'game', rarity: 'common', series: 'unofficial', group: 'humor', image: 'img/patches/smileRum.webp', shape: 'tab', bg: '', bg2: '', border: '#6b7a3c', ink: '', icon: '',
     condition: { kind: 'stat', key: 'failed', value: 3, text: 'Пережить 3 сорванных задания' } },
-  { key: 'u_medkit', name: 'Аптечка при себе', motto: '', category: 'game', rarity: 'common', series: 'unofficial', image: 'img/patches/medkit.webp', shape: 'tab', bg: '', bg2: '', border: '#6b7a3c', ink: '', icon: '',
+  { key: 'u_medkit', name: 'Аптечка при себе', motto: '', category: 'game', rarity: 'common', series: 'unofficial', group: 'girls', image: 'img/patches/medkit.webp', shape: 'tab', bg: '', bg2: '', border: '#6b7a3c', ink: '', icon: '',
     condition: { kind: 'stat', key: 'recovered', value: 10, text: 'Вернуть в строй 10 раненых' } },
-  { key: 'u_loveIsHug', name: 'Love is (объятия)', motto: '', category: 'game', rarity: 'common', series: 'unofficial', image: 'img/patches/loveIsHug.webp', shape: 'tab', bg: '', bg2: '', border: '#a5503f', ink: '', icon: '',
+  { key: 'u_loveIsHug', name: 'Love is (объятия)', motto: '', category: 'game', rarity: 'common', series: 'unofficial', group: 'humor', image: 'img/patches/loveIsHug.webp', shape: 'tab', bg: '', bg2: '', border: '#a5503f', ink: '', icon: '',
     condition: { kind: 'level', value: 3, text: 'Командир 3 уровня' } },
-  { key: 'u_pirateKnife', name: 'Человек как нож', motto: '', category: 'game', rarity: 'rare', series: 'unofficial', image: 'img/patches/pirateKnife.webp', shape: 'tab', bg: '', bg2: '', border: '#2f5aa8', ink: '', icon: '',
+  { key: 'u_pirateKnife', name: 'Человек как нож', motto: '', category: 'game', rarity: 'rare', series: 'unofficial', group: 'humor', image: 'img/patches/pirateKnife.webp', shape: 'tab', bg: '', bg2: '', border: '#2f5aa8', ink: '', icon: '',
     condition: { kind: 'stat', key: 'expeditionsWon', value: 25, text: '25 успешных походов' } },
-  { key: 'u_remote', name: 'Работаем на удалёнке', motto: '', category: 'game', rarity: 'rare', series: 'unofficial', image: 'img/patches/remote.webp', shape: 'tab', bg: '', bg2: '', border: '#d9902a', ink: '', icon: '',
+  { key: 'u_remote', name: 'Работаем на удалёнке', motto: '', category: 'game', rarity: 'rare', series: 'unofficial', group: 'service', image: 'img/patches/remote.webp', shape: 'tab', bg: '', bg2: '', border: '#d9902a', ink: '', icon: '',
     condition: { kind: 'stat', key: 'won_recon', value: 15, text: '15 успешных разведок' } },
-  { key: 'u_rearCovered', name: 'Тыл прикрыт', motto: '', category: 'game', rarity: 'rare', series: 'unofficial', image: 'img/patches/rearCovered.webp', shape: 'tab', bg: '', bg2: '', border: '#a5503f', ink: '', icon: '',
+  { key: 'u_rearCovered', name: 'Тыл прикрыт', motto: '', category: 'game', rarity: 'rare', series: 'unofficial', group: 'girls', image: 'img/patches/rearCovered.webp', shape: 'tab', bg: '', bg2: '', border: '#a5503f', ink: '', icon: '',
     condition: { kind: 'stat', key: 'flawless', value: 20, text: '20 успешных походов без потерь' } },
-  { key: 'u_goodGuys', name: 'И собрались все добрые', motto: '', category: 'game', rarity: 'epic', series: 'unofficial', image: 'img/patches/goodGuys.webp', shape: 'tab', bg: '', bg2: '', border: '#e6ddc9', ink: '', icon: '',
+  { key: 'u_goodGuys', name: 'И собрались все добрые', motto: '', category: 'game', rarity: 'epic', series: 'unofficial', group: 'humor', image: 'img/patches/goodGuys.webp', shape: 'tab', bg: '', bg2: '', border: '#e6ddc9', ink: '', icon: '',
     condition: { kind: 'stat', key: 'won_raid', value: 30, text: '30 успешных рейдов' } },
-  { key: 'u_loveIs', name: 'Love is', motto: '', category: 'game', rarity: 'epic', series: 'unofficial', image: 'img/patches/loveIs.webp', shape: 'tab', bg: '', bg2: '', border: '#c0392b', ink: '', icon: '',
+  { key: 'u_loveIs', name: 'Love is', motto: '', category: 'game', rarity: 'epic', series: 'unofficial', group: 'humor', image: 'img/patches/loveIs.webp', shape: 'tab', bg: '', bg2: '', border: '#c0392b', ink: '', icon: '',
     condition: { kind: 'stat', key: 'decisive', value: 20, text: '20 решительных успехов' } },
   // возможно получить за особые заслуги на сайте
-  { key: 'u_onlyNow', name: 'Только сейчас!', motto: '', category: 'site', rarity: 'rare', series: 'unofficial', image: 'img/patches/onlyNow.webp', shape: 'tab', bg: '', bg2: '', border: '#a5503f', ink: '', icon: '' },
-  { key: 'u_kingRedwar', name: 'Король REDWAR', motto: '', category: 'site', rarity: 'epic', series: 'unofficial', image: 'img/patches/kingRedwar.webp', shape: 'tab', bg: '', bg2: '', border: '#c0392b', ink: '', icon: '' },
-  { key: 'u_kingHearts', name: 'Король червей', motto: '', category: 'site', rarity: 'legendary', series: 'unofficial', image: 'img/patches/kingHearts.webp', shape: 'tab', bg: '', bg2: '', border: '#c0392b', ink: '', icon: '' },
-  { key: 'u_madeInRussia', name: 'Made in Russia', motto: '', category: 'site', rarity: 'legendary', series: 'unofficial', image: 'img/patches/madeInRussia.webp', shape: 'tab', bg: '', bg2: '', border: '#a5503f', ink: '', icon: '' },
+  { key: 'u_onlyNow', name: 'Только сейчас!', motto: '', category: 'site', rarity: 'rare', series: 'unofficial', group: 'girls', image: 'img/patches/onlyNow.webp', shape: 'tab', bg: '', bg2: '', border: '#a5503f', ink: '', icon: '' },
+  { key: 'u_kingRedwar', name: 'Король REDWAR', motto: '', category: 'site', rarity: 'epic', series: 'unofficial', group: 'service', image: 'img/patches/kingRedwar.webp', shape: 'tab', bg: '', bg2: '', border: '#c0392b', ink: '', icon: '' },
+  { key: 'u_kingHearts', name: 'Король червей', motto: '', category: 'site', rarity: 'legendary', series: 'unofficial', group: 'service', image: 'img/patches/kingHearts.webp', shape: 'tab', bg: '', bg2: '', border: '#c0392b', ink: '', icon: '' },
+  { key: 'u_madeInRussia', name: 'Made in Russia', motto: '', category: 'site', rarity: 'legendary', series: 'unofficial', group: 'girls', image: 'img/patches/madeInRussia.webp', shape: 'tab', bg: '', bg2: '', border: '#a5503f', ink: '', icon: '' },
+  // ── неуставные, вторая поставка ──
+  // за достижения в игре
+  { key: 'u_doge', name: 'Доге с ночником', motto: '', category: 'game', rarity: 'common', series: 'unofficial', group: 'humor', image: 'img/patches/doge.webp', shape: 'tab', bg: '', bg2: '', border: '#5b6fa8', ink: '', icon: '',
+    condition: { kind: 'stat', key: 'encounters', value: 5, text: '5 случайных встреч в походах' } },
+  { key: 'u_ptsd', name: 'У вас ПТСР', motto: '', category: 'game', rarity: 'common', series: 'unofficial', group: 'humor', image: 'img/patches/ptsd.webp', shape: 'tab', bg: '', bg2: '', border: '#d9a43a', ink: '', icon: '',
+    condition: { kind: 'stat', key: 'expeditionsSent', value: 100, text: 'Отправить 100 походов' } },
+  { key: 'u_uaz', name: 'Козлик', motto: '', category: 'game', rarity: 'common', series: 'unofficial', group: 'service', image: 'img/patches/uaz.webp', shape: 'tab', bg: '', bg2: '', border: '#6b7a3c', ink: '', icon: '',
+    condition: { kind: 'stat', key: 'repairs', value: 10, text: 'Сделать 10 ремонтов' } },
+  { key: 'u_suspenders', name: 'Подтяжки', motto: '', category: 'game', rarity: 'common', series: 'unofficial', group: 'girls', image: 'img/patches/suspenders.webp', shape: 'tab', bg: '', bg2: '', border: '#7c8a86', ink: '', icon: '',
+    condition: { kind: 'stat', key: 'modelsBuilt', value: 2, text: 'Собрать 2 модели дронов' } },
+  { key: 'u_driver', name: 'Водила', motto: '', category: 'game', rarity: 'rare', series: 'unofficial', group: 'service', image: 'img/patches/driver.webp', shape: 'tab', bg: '', bg2: '', border: '#9aa58c', ink: '', icon: '',
+    condition: { kind: 'stat', key: 'won_supply', value: 25, text: '25 успешных заданий «Снабжение»' } },
+  { key: 'u_posadki', name: 'Run Through The Posadki', motto: '', category: 'game', rarity: 'rare', series: 'unofficial', group: 'humor', image: 'img/patches/posadki.webp', shape: 'tab', bg: '', bg2: '', border: '#5a3ea8', ink: '', icon: '',
+    condition: { kind: 'stat', key: 'won_raid', value: 60, text: '60 успешных рейдов' } },
+  { key: 'u_hideSeek', name: 'Кто не спрятался', motto: '', category: 'game', rarity: 'rare', series: 'unofficial', group: 'service', image: 'img/patches/hideSeek.webp', shape: 'tab', bg: '', bg2: '', border: '#d6cdb4', ink: '', icon: '',
+    condition: { kind: 'stat', key: 'won_stronghold', value: 10, text: 'Взять 10 опорных пунктов' } },
+  { key: 'u_milf', name: 'Специалист по милфам', motto: '', category: 'game', rarity: 'rare', series: 'unofficial', group: 'humor', image: 'img/patches/milf.webp', shape: 'tab', bg: '', bg2: '', border: '#e6ddc9', ink: '', icon: '',
+    condition: { kind: 'level', value: 6, text: 'Командир 6 уровня' } },
+  { key: 'u_glasses', name: 'Очки и калаш', motto: '', category: 'game', rarity: 'rare', series: 'unofficial', group: 'girls', image: 'img/patches/glasses.webp', shape: 'tab', bg: '', bg2: '', border: '#2fa3a3', ink: '', icon: '',
+    condition: { kind: 'stat', key: 'won_expedition', value: 10, text: '10 успешных экспедиций' } },
+  { key: 'u_wolfGirl', name: 'Волчица', motto: '', category: 'game', rarity: 'rare', series: 'unofficial', group: 'girls', image: 'img/patches/wolfGirl.webp', shape: 'tab', bg: '', bg2: '', border: '#7a2e3a', ink: '', icon: '',
+    condition: { kind: 'stat', key: 'maxStreak', value: 14, text: 'Заходить 14 дней подряд' } },
+  { key: 'u_fpvGirl', name: 'Пилотесса FPV', motto: '', category: 'game', rarity: 'epic', series: 'unofficial', group: 'girls', image: 'img/patches/fpvGirl.webp', shape: 'tab', bg: '', bg2: '', border: '#8fa77d', ink: '', icon: '',
+    condition: { kind: 'stat', key: 'campaignSteps', value: 20, text: 'Пройти сюжетную кампанию' } },
+  { key: 'u_headEyes', name: 'Голова, глаза', motto: '', category: 'game', rarity: 'epic', series: 'unofficial', group: 'girls', image: 'img/patches/headEyes.webp', shape: 'tab', bg: '', bg2: '', border: '#c0392b', ink: '', icon: '',
+    condition: { kind: 'stat', key: 'defended', value: 25, text: 'Отбить 25 атак на полигон' } },
+  { key: 'u_freckles', name: 'Веснушки', motto: '', category: 'game', rarity: 'epic', series: 'unofficial', group: 'girls', image: 'img/patches/freckles.webp', shape: 'tab', bg: '', bg2: '', border: '#7a2e2e', ink: '', icon: '',
+    condition: { kind: 'level', value: 9, text: 'Командир 9 уровня' } },
+  { key: 'u_gosuslugi', name: 'Девушка на госуслугах', motto: '', category: 'game', rarity: 'legendary', series: 'unofficial', group: 'girls', image: 'img/patches/gosuslugi.webp', shape: 'tab', bg: '', bg2: '', border: '#2f5aa8', ink: '', icon: '',
+    condition: { kind: 'stat', key: 'achPoints', value: 600, text: 'Набрать 600 очков достижений' } },
+  // возможно получить за особые заслуги на сайте
+  { key: 'u_nikolai', name: 'Святитель Николай', motto: '', category: 'site', rarity: 'epic', series: 'unofficial', group: 'service', image: 'img/patches/nikolai.webp', shape: 'tab', bg: '', bg2: '', border: '#c9a23a', ink: '', icon: '' },
+  { key: 'u_rubezhGirl', name: 'Девушка «Рубежа»', motto: '', category: 'site', rarity: 'legendary', series: 'unofficial', group: 'girls', image: 'img/patches/rubezhGirl.webp', shape: 'tab', bg: '', bg2: '', border: '#6b7a3c', ink: '', icon: '' },
 ];
 // уставные шевроны нарисованы отдельными картинками-нашивками (img/chevrons/<key>.webp)
 for (const c of CHEVRONS) if (!c.image) c.image = `img/chevrons/${c.key}.webp`;

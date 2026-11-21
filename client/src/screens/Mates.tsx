@@ -3,7 +3,7 @@ import { OPERATORS } from '../../../shared/config';
 import React, { useEffect, useState } from 'react';
 import { AWARDS, TUTORIAL } from '../../../shared/config';
 import {
-  CHEVRONS, CHEVRON_CATEGORIES, CHEVRON_RARITY_COLORS, CHEVRON_RARITY_NAMES, CHEVRON_SERIES, ChevronDef, ChevronSeries, chevronByKey, chevronProgress, chevronSeries,
+  CHEVRONS, CHEVRON_CATEGORIES, CHEVRON_RARITY_COLORS, CHEVRON_RARITY_NAMES, CHEVRON_SERIES, ChevronDef, ChevronSeries, UNOFFICIAL_GROUPS, chevronByKey, chevronProgress, chevronSeries,
 } from '../../../shared/chevrons';
 import { COMMANDER_TITLES } from '../../../shared/lore';
 import { PlayerListItem, PublicProfile, api } from '../api';
@@ -80,15 +80,18 @@ export function ChevronsTab() {
       </div>
       <p className="muted small">{CHEVRON_SERIES.find((x) => x.key === series)!.text}</p>
 
-      {CHEVRON_CATEGORIES.map((cat) => {
-        const list = CHEVRONS.filter((c) => c.category === cat.key && chevronSeries(c) === series);
+      {(series === 'unofficial'
+        ? UNOFFICIAL_GROUPS.map((g) => ({ key: g.key, name: g.name, text: g.text, icon: g.icon, list: CHEVRONS.filter((c) => chevronSeries(c) === 'unofficial' && c.group === g.key) }))
+        : CHEVRON_CATEGORIES.map((cat) => ({ key: cat.key, name: cat.name, text: cat.text, icon: cat.key === 'site' ? 'medal' : cat.key === 'game' ? 'flag' : 'base', list: CHEVRONS.filter((c) => c.category === cat.key && chevronSeries(c) === series) }))
+      ).map((cat) => {
+        const list = cat.list;
         if (!list.length) return null;
         const got = list.filter((c) => owned.has(c.key)).length;
         return (
           <section key={cat.key} className={`panel chev-cat cat-${cat.key} ${series === 'unofficial' ? 'unofficial' : ''}`}>
             <div className="between">
               <h2>
-                <Icon name={cat.key === 'site' ? 'medal' : cat.key === 'game' ? 'flag' : 'base'} size={20} /> {cat.name}
+                <Icon name={cat.icon} size={20} /> {cat.name}
               </h2>
               <span className="pill small">
                 {got}/{list.length}
@@ -105,6 +108,9 @@ export function ChevronsTab() {
                     <Chevron def={c} size={74} dim={!mine} />
                     <b>{c.name}</b>
                     <RarityTag c={c} />
+                    {series === 'unofficial' && c.category === 'site' && (
+                      <span className="tag gold"><Icon name="medal" size={12} /> за заслуги на сайте</span>
+                    )}
                     {mine ? (
                       isWorn ? (
                         <span className="chev-state on">
@@ -124,7 +130,7 @@ export function ChevronsTab() {
                         </small>
                       </div>
                     ) : (
-                      <small className="muted">{cat.key === 'site' ? 'Выдаёт сайт «Учёт дронов»' : 'Пока не получен'}</small>
+                      <small className="muted">{c.category === 'site' ? 'Выдаёт сайт «Учёт дронов»' : 'Пока не получен'}</small>
                     )}
                     {mine && <small className="tiny muted">с {fmtDate(mine.at)}</small>}
                   </div>
