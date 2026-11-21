@@ -270,6 +270,20 @@ export const CHEVRONS: ChevronDef[] = [
     condition: { kind: 'stat', key: 'maxStreak', value: 30, text: 'Заходить 30 дней подряд' } },
   { key: 'u_redHairPilot', name: 'Рыжая', motto: '', category: 'site', rarity: 'epic', series: 'unofficial', group: 'girls', image: 'img/patches/redHairPilot.webp', shape: 'tab', bg: '', bg2: '', border: '#c0392b', ink: '', icon: '' },
   { key: 'u_weRussians', name: 'Мы русские — с нами Бог', motto: '', category: 'site', rarity: 'legendary', series: 'unofficial', group: 'service', image: 'img/patches/weRussians.webp', shape: 'tab', bg: '', bg2: '', border: '#d9a43a', ink: '', icon: '' },
+  // ── неуставные, пятая поставка ──
+  { key: 'u_commSpecialist', name: 'Специалист по общению', motto: '', category: 'game', rarity: 'common', series: 'unofficial', group: 'humor', image: 'img/patches/commSpecialist.webp', shape: 'tab', bg: '', bg2: '', border: '#c0392b', ink: '', icon: '',
+    condition: { kind: 'stat', key: 'pvpSent', value: 5, text: 'Совершить 5 набегов' } },
+  { key: 'u_whyCannon', name: 'Они заряжают пушку… зачем?', motto: '', category: 'game', rarity: 'rare', series: 'unofficial', group: 'humor', image: 'img/patches/whyCannon.webp', shape: 'tab', bg: '', bg2: '', border: '#2f7ad9', ink: '', icon: '',
+    condition: { kind: 'stat', key: 'attacksLost', value: 5, text: 'Пережить 5 прорывов противника' } },
+  { key: 'u_noMercy', name: 'No Mercy', motto: '', category: 'game', rarity: 'rare', series: 'unofficial', group: 'humor', image: 'img/patches/noMercy.webp', shape: 'tab', bg: '', bg2: '', border: '#9aa3a8', ink: '', icon: '',
+    condition: { kind: 'stat', key: 'won_stronghold', value: 20, text: 'Взять 20 опорных пунктов' } },
+  { key: 'u_welcomeHell', name: 'Добро пожаловать в ад!!!', motto: '', category: 'game', rarity: 'rare', series: 'unofficial', group: 'girls', image: 'img/patches/welcomeHell.webp', shape: 'tab', bg: '', bg2: '', border: '#9aa3a8', ink: '', icon: '',
+    condition: { kind: 'stat', key: 'defended', value: 40, text: 'Отбить 40 атак на полигон' } },
+  { key: 'u_fpvTattoo', name: 'Пилотесса в очках', motto: '', category: 'game', rarity: 'epic', series: 'unofficial', group: 'girls', image: 'img/patches/fpvTattoo.webp', shape: 'tab', bg: '', bg2: '', border: '#6b7a3c', ink: '', icon: '',
+    condition: { kind: 'stat', key: 'won_raid', value: 100, text: '100 успешных рейдов' } },
+  { key: 'u_skyGuard', name: 'Страж с небес', motto: '', category: 'game', rarity: 'epic', series: 'unofficial', group: 'service', image: 'img/patches/skyGuard.webp', shape: 'tab', bg: '', bg2: '', border: '#d9a43a', ink: '', icon: '',
+    condition: { kind: 'stat', key: 'modelsBuilt', value: 10, text: 'Собрать 10 моделей дронов' } },
+  { key: 'u_kokoshnikSniper', name: 'Снайперша в кокошнике', motto: '', category: 'site', rarity: 'legendary', series: 'unofficial', group: 'girls', image: 'img/patches/kokoshnikSniper.webp', shape: 'tab', bg: '', bg2: '', border: '#9aa3a8', ink: '', icon: '' },
 ];
 // уставные шевроны нарисованы отдельными картинками-нашивками (img/chevrons/<key>.webp)
 for (const c of CHEVRONS) if (!c.image) c.image = `img/chevrons/${c.key}.webp`;
