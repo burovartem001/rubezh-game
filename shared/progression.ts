@@ -291,10 +291,10 @@ export const RESEARCH: ResearchDef[] = [
   { key: 'med4', branch: 'med', tier: 4, name: 'Реабилитация', text: 'Больше раненых встают в поле.', mods: { field: 0.15, losses: 0.05 } },
 ];
 export const RESEARCH_COST: Record<number, { cost: Cost; time: number; comms: number }> = {
-  1: { cost: { data: 30, parts: 100 }, time: 600, comms: 1 },
-  2: { cost: { data: 80, parts: 250 }, time: 2400, comms: 3 },
-  3: { cost: { data: 180, parts: 500, supplies: 300 }, time: 7200, comms: 5 },
-  4: { cost: { data: 350, parts: 900, supplies: 600 }, time: 21600, comms: 7 },
+  1: { cost: { data: 40, parts: 200 }, time: 1800, comms: 1 },
+  2: { cost: { data: 120, parts: 600 }, time: 7200, comms: 3 },
+  3: { cost: { data: 300, parts: 1500, supplies: 1000 }, time: 21600, comms: 5 },
+  4: { cost: { data: 600, parts: 3500, supplies: 2500 }, time: 50400, comms: 7 },
 };
 export function researchByKey(key: string) {
   return RESEARCH.find((r) => r.key === key);
@@ -317,7 +317,7 @@ export function prestigeMods(prestige: number): Partial<Mods> {
 export const ATTACK_WINDOW = 8 * 3_600_000;
 export const ATTACK_CHANCE = 0.5;
 export const ATTACK_LOOKBACK = 24 * 3_600_000; // после долгого отсутствия учитываем атаки только за последние сутки
-export const CONTROL_GRACE = 24 * 3_600_000; // сутки контроль держится без потерь
+export const CONTROL_GRACE = 48 * 3_600_000; // двое суток контроль держится без потерь
 export const CONTROL_DECAY_PER_HOUR = 2;
 export const LOOT_PROTECTED_SHARE = 0.4; // доля вместимости, которую нельзя отнять
 /** Атака противника в окне w: есть ли, когда и какой силы. */

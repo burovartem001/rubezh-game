@@ -10,7 +10,7 @@ import { CHEVRONS } from '../../../shared/chevrons.js';
 import {
   ACHIEVEMENTS, ACH_POINTS, ACH_REWARD, BLUEPRINT_PARTS, BUILDING_FX, CAMPAIGN, CampaignReward, CampaignStep, DRONE_PARTS, DRONE_SLOTS, DroneSlot,
   ENCOUNTERS, ENCOUNTER_CHANCE, EQUIP_WEAR_PER_MISSION, EVENTS, MASCOTS, MODEL_CLASSES, MODEL_COLORS, MODEL_WEAR_PER_MISSION, OUTPOST, WORKSHOP_DISCOUNT,
-  achTier, eventKey, eventWindow, modelCost, modelTime, modelsBonus, partByKey, repairDiscount, wearCut,
+  achTier, chapterLockLevel, eventKey, eventWindow, modelCost, modelTime, modelsBonus, partByKey, repairDiscount, wearCut,
 } from '../../../shared/content.js';
 import { ATTACK_LOOKBACK, ATTACK_WINDOW, EPOCH, Mods, attackInWindow, seasonIndex, seasonTheme } from '../../../shared/progression.js';
 import { ExpeditionResult, rng } from '../../../shared/calc.js';
@@ -204,7 +204,7 @@ export async function checkCampaignGoals(c: Db, ps: PS) {
   let guard = 0;
   while (guard++ < 5) {
     const st = CAMPAIGN[ps.campaign.step];
-    if (!st || st.kind !== 'goal' || !goalDone(ps, st)) return;
+    if (!st || st.kind !== 'goal' || chapterLockLevel(st, ps.p.cmd_level) || !goalDone(ps, st)) return;
     await advanceCampaign(c, ps, st);
   }
 }
@@ -212,6 +212,7 @@ export async function checkCampaignGoals(c: Db, ps: PS) {
 export function campaignMissionCheck(ps: PS, key: string, sectorId: number, mission: MissionType, group: Partial<Record<OperatorType, number>>, vehicle: string) {
   const st = CAMPAIGN[ps.campaign.step];
   if (!st || st.key !== key || st.kind !== 'mission') throw new GameError('Это задание кампании сейчас недоступно');
+  if (chapterLockLevel(st, ps.p.cmd_level)) throw new GameError(`Глава ${st.chapter} откроется с ${chapterLockLevel(st, ps.p.cmd_level)} уровня командира`);
   if (st.sectorId !== sectorId || st.mission !== mission) throw new GameError('Задание кампании — в другом секторе');
   const size = OPERATOR_TYPES.reduce((s, t) => s + (group[t] ?? 0), 0);
   if (st.onlyTypes && OPERATOR_TYPES.some((t) => (group[t] ?? 0) > 0 && !st.onlyTypes!.includes(t)))
@@ -424,6 +425,7 @@ export function deepActions(addJob: AddJob): Record<string, H> {
     async campaignAck(c, ps, a) {
       const st = CAMPAIGN[ps.campaign.step];
       if (!st || st.kind !== 'scene' || st.key !== a.key) throw new GameError('Сцена уже просмотрена');
+      if (chapterLockLevel(st, ps.p.cmd_level)) throw new GameError(`Глава ${st.chapter} откроется с ${chapterLockLevel(st, ps.p.cmd_level)} уровня командира`);
       await advanceCampaign(c, ps, st);
       await checkCampaignGoals(c, ps);
       return '';
@@ -431,6 +433,7 @@ export function deepActions(addJob: AddJob): Record<string, H> {
     async campaignChoose(c, ps, a) {
       const st = CAMPAIGN[ps.campaign.step];
       if (!st || st.kind !== 'choice' || st.key !== a.key) throw new GameError('Выбор уже сделан');
+      if (chapterLockLevel(st, ps.p.cmd_level)) throw new GameError(`Глава ${st.chapter} откроется с ${chapterLockLevel(st, ps.p.cmd_level)} уровня командира`);
       const opt = st.options?.find((o) => o.key === a.option);
       if (!opt) throw new GameError('Нет такого варианта');
       ps.campaign.flags[st.key] = opt.key;

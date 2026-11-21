@@ -59,7 +59,7 @@ test('долгая игра: исследования, бойцы, оборон�
   r = await act(a.token, 'research', { key: 'comm1' });
   assert.equal(r.status, 200, JSON.stringify(r.body));
   assert.equal((await act(a.token, 'research', { key: 'uav1' })).status, 400, 'одно исследование за раз');
-  await travel(a.id, 700);
+  await travel(a.id, 700 * 30);
   r = await call(a.token, 'state');
   assert.ok(r.body.research.includes('comm1'));
   assert.ok(r.body.modParts.some((p: any) => p.label === 'Исследования' && p.mods.recon > 0));
@@ -68,7 +68,7 @@ test('долгая игра: исследования, бойцы, оборон�
   r = await act(a.token, 'dispatch', { sectorId: 1, mission: 'recon', group: { scout: 2 }, vehicle: 'moto', equipment: [] });
   assert.equal(r.status, 200, JSON.stringify(r.body));
   assert.equal(r.body.state.soldiers.filter((s: any) => s.status === 'mission').length, 2);
-  await travel(a.id, 4000);
+  await travel(a.id, 4000 * 30);
   r = await call(a.token, 'state');
   const back = r.body.soldiers.filter((s: any) => s.type === 'scout');
   assert.ok(back.every((s: any) => s.status !== 'mission'));
@@ -77,7 +77,7 @@ test('долгая игра: исследования, бойцы, оборон�
   assert.ok(r.body.week.points > 0, 'очки недели начислены');
 
   // удержание контроля: сектор теряет контроль после суток без походов
-  await db.query(`UPDATE sectors SET control=100, recon=60, control_at=now()-interval '48 hours' WHERE user_id=$1 AND sector_id=1`, [a.id]);
+  await db.query(`UPDATE sectors SET control=100, recon=60, control_at=now()-interval '72 hours' WHERE user_id=$1 AND sector_id=1`, [a.id]);
   r = await call(a.token, 'state');
   const c1 = r.body.sectors.find((s: any) => s.id === 1).control;
   assert.ok(c1 <= 53 && c1 >= 50, `контроль упал до ~52, сейчас ${c1}`);
@@ -147,7 +147,7 @@ test('роты: склад, помощь в стройке, штурм; рейт
   r = await act(a.token, 'pvpRaid', { targetId: victim.id, group: { scout: 2 }, vehicle: 'moto', equipment: [] });
   assert.equal(r.status, 200, JSON.stringify(r.body));
   assert.equal((await act(a.token, 'pvpRaid', { targetId: victim.id, group: { scout: 0, fpv: 0 }, vehicle: 'moto' })).status, 400);
-  await travel(a.id, 2000);
+  await travel(a.id, 2000 * 30);
   r = await call(a.token, 'state');
   assert.equal(r.status, 200, JSON.stringify(r.body));
   const rep = r.body.reports.find((x: any) => x.kind === 'pvp_attack');

@@ -55,7 +55,7 @@ test('полный первый цикл и защита от двойных д�
   assert.ok(Math.abs(r.body.state.resources.supplies - s1) < 1, 'повтор не списал ресурсы');
   r = await act('build', { building: 'training' });
   assert.equal(r.status, 400, 'очередь строительства одна');
-  await travel(25);
+  await travel(25 * 30);
   r = await call('state');
   assert.equal(r.body.buildings.hq, 2);
   assert.equal(r.body.tutorialStep, 1);
@@ -63,11 +63,11 @@ test('полный первый цикл и защита от двойных д�
   // 2. Разведчик
   r = await act('train', { type: 'scout', count: 1 });
   assert.equal(r.status, 200, JSON.stringify(r.body));
-  await travel(20);
+  await travel(20 * 30);
   // 3. Электровелосипед
   r = await act('acquireVehicle', { type: 'ebike' });
   assert.equal(r.status, 200, JSON.stringify(r.body));
-  await travel(25);
+  await travel(25 * 30);
   r = await call('state');
   assert.equal(r.body.operators.scout.available, 3);
   assert.ok(r.body.vehicles.ebike);
@@ -84,7 +84,7 @@ test('полный первый цикл и защита от двойных д�
   r = await act('dispatch', { ...dispatch, vehicle: 'moto', group: { scout: 1 } });
   assert.equal(r.status, 400, 'занятые операторы не уходят повторно');
 
-  await travel(400);
+  await travel(400 * 30);
   const [s1r, s2r] = await Promise.all([call('state'), call('state')]);
   assert.equal(s1r.status, 200);
   assert.equal(s2r.status, 200);
@@ -104,10 +104,10 @@ test('полный первый цикл и защита от двойных д�
   // 5–6. FPV и первый предмет оснащения
   r = await act('build', { building: 'training' });
   assert.equal(r.status, 200, JSON.stringify(r.body));
-  await travel(40);
+  await travel(40 * 30);
   r = await act('train', { type: 'fpv', count: 1 });
   assert.equal(r.status, 200, JSON.stringify(r.body));
-  await travel(40);
+  await travel(40 * 30);
   r = await call('state');
   assert.equal(r.body.tutorialStep, 6);
   assert.equal(r.body.equipment.length, 1);

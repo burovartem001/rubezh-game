@@ -67,7 +67,7 @@ export function modelCost(parts: Record<DroneSlot, string>): Cost {
   return c as Cost;
 }
 export function modelTime(parts: Record<DroneSlot, string>): number {
-  return 120 + 30 * Object.values(parts).filter((k) => partByKey(k)?.blueprint).length;
+  return 1800 + 900 * Object.values(parts).filter((k) => partByKey(k)?.blueprint).length;
 }
 export function modelMods(parts: Record<DroneSlot, string>): Partial<Mods> {
   const m: Record<string, number> = {};
@@ -144,9 +144,9 @@ export const OUTPOST = {
   minControl: 50,
   maxLevel: 5,
   buildCost: { supplies: 600, parts: 500, fuel: 200 } as Cost,
-  buildTime: 900,
+  buildTime: 3600,
   upgradeCost: (lvl: number): Cost => ({ supplies: Math.round(400 * Math.pow(1.5, lvl)), parts: Math.round(350 * Math.pow(1.5, lvl)), fuel: 100 * lvl }),
-  upgradeTime: (lvl: number) => Math.round(900 * Math.pow(1.5, lvl)),
+  upgradeTime: (lvl: number) => Math.round(3600 * Math.pow(1.8, lvl)),
   timeCut: (lvl: number) => 0.15 + 0.05 * lvl,
   fuelCut: (lvl: number) => 0.2 + 0.05 * lvl,
   defense: (lvl: number, mainDefense: number) => Math.round(20 * lvl + mainDefense * 0.3),
@@ -179,12 +179,17 @@ export interface CampaignStep {
   reward?: CampaignReward;
 }
 export const CHAPTERS = [
-  { n: 1, name: 'Чужой сигнал', text: 'Искра ловит в эфире передачу, которой быть не должно.' },
-  { n: 2, name: 'Мастерская Бати', text: 'Пора делать свои дроны, а не только чинить чужие.' },
-  { n: 3, name: 'Ночь длинная', text: 'Противник стал злее. Ночные вылеты и проверка обороны.' },
-  { n: 4, name: 'Передовой', text: 'Полигон выходит вперёд — к дальним секторам.' },
-  { n: 5, name: 'Рубеж', text: 'Последний рубеж этой карты. Всё, чему научились, — в дело.' },
+  { n: 1, name: 'Чужой сигнал', text: 'Искра ловит в эфире передачу, которой быть не должно.', minLevel: 1 },
+  { n: 2, name: 'Мастерская Бати', text: 'Пора делать свои дроны, а не только чинить чужие.', minLevel: 3 },
+  { n: 3, name: 'Ночь длинная', text: 'Противник стал злее. Ночные вылеты и проверка обороны.', minLevel: 5 },
+  { n: 4, name: 'Передовой', text: 'Полигон выходит вперёд — к дальним секторам.', minLevel: 7 },
+  { n: 5, name: 'Рубеж', text: 'Последний рубеж этой карты. Всё, чему научились, — в дело.', minLevel: 8 },
 ];
+/** Уровень командира, с которого открывается глава шага кампании (0 — уже открыта). */
+export function chapterLockLevel(step: { chapter: number } | undefined, cmdLevel: number): number {
+  const need = CHAPTERS.find((c) => c.n === step?.chapter)?.minLevel ?? 1;
+  return cmdLevel >= need ? 0 : need;
+}
 export const CAMPAIGN: CampaignStep[] = [
   // ── Глава 1
   { key: 'c1s', chapter: 1, title: 'Странная передача', kind: 'scene', lines: [
@@ -235,7 +240,7 @@ export const CAMPAIGN: CampaignStep[] = [
     { who: 'batya', text: 'Построим. Только держать его придётся — противник не обрадуется.' },
   ], reward: { res: { supplies: 300, fuel: 150 } } },
   { key: 'c4g1', chapter: 4, title: 'Передовой пункт', kind: 'goal', goal: { kind: 'outpost', value: 1, text: 'Построить передовой пункт' }, reward: { res: { parts: 400 } } },
-  { key: 'c4g2', chapter: 4, title: 'Под контролем', kind: 'goal', goal: { kind: 'control', value: 3, text: 'Держать под полным контролем 3 сектора' }, reward: { blueprint: 'p_cluster' } },
+  { key: 'c4g2', chapter: 4, title: 'Под контролем', kind: 'goal', goal: { kind: 'control', value: 2, text: 'Держать под полным контролем 2 сектора' }, reward: { blueprint: 'p_cluster' } },
   { key: 'c4m', chapter: 4, title: 'Депо', kind: 'mission', sectorId: 10, mission: 'raid', difficulty: 4, minSize: 5,
     reward: { res: { supplies: 500, parts: 500, data: 50 } } },
   // ── Глава 5

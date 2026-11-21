@@ -66,7 +66,7 @@ import { addPoints, dispatchBonus, pickSoldiers, playerMods } from './meta.js';
 import { SOCIAL_ACTIONS } from './social.js';
 import { campaignMissionCheck, deepActions, workshopMul } from './deep.js';
 import { instructorMulOf, recoveryMulOf, repairMul, vehicleUpgradeMul } from '../../../shared/deepcalc.js';
-import { LATE_BUILDINGS } from '../../../shared/config.js';
+import { LATE_BUILDINGS, hqCommanderLevel } from '../../../shared/config.js';
 import { BUILDING_FX, CAMPAIGN, INSTRUCTOR_BONUS, MAX_INSTRUCTORS, SPEC_LEVEL, healScarsCost, repairDiscount, specByKey } from '../../../shared/content.js';
 import { SOLDIER_MAX_LEVEL } from '../../../shared/progression.js';
 
@@ -131,6 +131,7 @@ export const ACTIONS: Record<string, Handler> = {
     const unlock = BUILDINGS[key].unlockHq ?? 1;
     if (ps.buildings.hq < unlock) throw new GameError(`${BUILDINGS[key].name} — с командного пункта ${unlock} уровня`);
     if (key !== 'hq' && level + 1 > ps.buildings.hq) throw new GameError(`Сначала улучшите командный пункт до ${level + 1} уровня`);
+    if (key === 'hq' && ps.p.cmd_level < hqCommanderLevel(level)) throw new GameError(`Командный пункт ${level + 1} уровня — с ${hqCommanderLevel(level)} уровня командира. Опыт дают походы`);
     const cost = buildingUpgradeCost(key, level);
     spend(ps, cost);
     const t = buildingUpgradeTime(key, level);

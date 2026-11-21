@@ -141,7 +141,7 @@ export function planExpedition(inp: PlanInput): Plan {
   let duration = sector.baseTime * m.timeMul * vb.timeMul * Math.max(0.3, 1 - M.time);
   if (vb.timeMul < 1) reasons.push({ text: `${vName}: время похода −${pct(1 - vb.timeMul)}`, kind: 'bonus' });
   if (vb.timeMul > 1) reasons.push({ text: `${vName}: время похода +${pct(vb.timeMul - 1)}`, kind: 'malus' });
-  duration = Math.max(20, Math.round(duration));
+  duration = Math.max(mission === 'expedition' ? 3600 : 20, Math.round(duration)); // экспедиция — не меньше часа
 
   // Стоимость
   const economy = (skills.economy ?? 0) * SKILL_EFFECTS.economy;

@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import { MISSIONS, OPERATORS, OperatorType, VEHICLES, sectorById } from '../../../shared/config';
 import {
-  ACHIEVEMENTS, ACH_POINTS, ACH_TITLES, BLUEPRINT_PARTS, BUILDING_FX, CAMPAIGN, CHAPTERS, CampaignStep, DEFAULT_MODEL, DRONE_PARTS, DRONE_SLOTS, DroneSlot,
+  ACHIEVEMENTS, ACH_POINTS, ACH_TITLES, BLUEPRINT_PARTS, BUILDING_FX, CAMPAIGN, CHAPTERS, chapterLockLevel, CampaignStep, DEFAULT_MODEL, DRONE_PARTS, DRONE_SLOTS, DroneSlot,
   ENCOUNTERS, EVENTS, MASCOTS, PART_ICONS, MAX_INSTRUCTORS, MODEL_CLASSES, MODEL_COLORS, OUTPOST, SPECS, SPEC_LEVEL, achTitle, fatigueNow, healScarsCost, modelCost,
   modelMods, modelTime, partByKey, wearFactor,
 } from '../../../shared/content';
@@ -64,7 +64,8 @@ export function CampaignCard() {
   const st = CAMPAIGN[state.campaign.step];
   const ch = CHAPTERS.find((c) => c.n === (st?.chapter ?? 5))!;
   const done = !st;
-  const action = !st ? 'Кампания пройдена' : st.kind === 'scene' ? 'Новая сцена' : st.kind === 'choice' ? 'Нужно решение' : st.kind === 'mission' ? 'Задание готово' : 'Цель';
+  const lockLvl = chapterLockLevel(st, state.commander.level);
+  const action = !st ? 'Кампания пройдена' : lockLvl ? `с ${lockLvl} ур. командира` : st.kind === 'scene' ? 'Новая сцена' : st.kind === 'choice' ? 'Нужно решение' : st.kind === 'mission' ? 'Задание готово' : 'Цель';
   return (
     <>
       <button className={`camp-card ${done ? 'done' : ''} ${st && (st.kind === 'scene' || st.kind === 'choice') ? 'ping' : ''}`} onClick={() => setOpen(true)}>
@@ -97,11 +98,11 @@ export function CampaignSheet({ onClose }: { onClose: () => void }) {
         {CHAPTERS.map((c) => {
           const steps = CAMPAIGN.map((s, i) => ({ s, i })).filter((x) => x.s.chapter === c.n);
           const doneN = steps.filter((x) => x.i < step).length;
-          const locked = steps[0].i > step;
+          const locked = steps[0].i > step || state.commander.level < c.minLevel;
           return (
             <button key={c.n} role="tab" aria-selected={chapter === c.n} className={`chapter ${chapter === c.n ? 'on' : ''} ${locked ? 'locked' : ''} ${doneN === steps.length ? 'done' : ''}`} onClick={() => !locked && setChapter(c.n)} disabled={locked}>
               <span className="kicker">Глава {c.n}</span>
-              <b>{locked ? '???' : c.name}</b>
+              <b>{locked ? (state.commander.level < c.minLevel ? `с ${c.minLevel} ур.` : '???') : c.name}</b>
               <small>{doneN}/{steps.length}</small>
             </button>
           );
@@ -120,7 +121,12 @@ export function CampaignSheet({ onClose }: { onClose: () => void }) {
       {!st && (
         <Speech who="sova">Кампания пройдена. Рубеж — наш. Дальше — карта, рота и события выходных: служба продолжается.</Speech>
       )}
-      {st && st.chapter === chapter && (
+      {st && st.chapter === chapter && chapterLockLevel(st, state.commander.level) > 0 && (
+        <Speech who="sova">
+          Глава {st.chapter} «{CHAPTERS[st.chapter - 1].name}» откроется, когда командир дорастёт до {chapterLockLevel(st, state.commander.level)} уровня. Опыт дают походы — чем сложнее сектор, тем больше.
+        </Speech>
+      )}
+      {st && st.chapter === chapter && !chapterLockLevel(st, state.commander.level) && (
         <div className="camp-now">
           <h3>
             <Icon name="flag" size={18} /> Сейчас: {st.title}

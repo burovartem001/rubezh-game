@@ -20,7 +20,9 @@
     "test:awards": "tsx --test tests/awards.test.ts",
     "test:chevrons": "tsx --test tests/chevrons.test.ts",
     "test:long": "tsx --test tests/long.test.ts",
-    "test:depth": "tsx --test tests/depth.test.ts"
+    "test:depth": "tsx --test tests/depth.test.ts",
+    "test:balance": "tsx --test tests/balance.test.ts",
+    "sim": "tsx sim/sim.ts"
   },
   "dependencies": {
     "express": "^5.1.0",

@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  BUILDINGS, BUILDING_KEYS, BuildingKey, DAILY, DAILY_KEYS, DailyKey, MAX_BUILDING_LEVEL, buildingEffectText, buildingUpgradeCost, buildingUpgradeTime,
+  BUILDINGS, BUILDING_KEYS, BuildingKey, hqCommanderLevel, DAILY, DAILY_KEYS, DailyKey, MAX_BUILDING_LEVEL, buildingEffectText, buildingUpgradeCost, buildingUpgradeTime,
 } from '../../../shared/config';
 import { BUILDING_HOST, BUILDING_LORE, EMPTY, IDLE_TIPS } from '../../../shared/lore';
 import { useGame } from '../game';
@@ -219,6 +219,7 @@ function BuildingSheet({ k, onClose }: { k: BuildingKey; onClose: () => void }) 
   if (max) why = 'Это предел — здание полностью развито';
   else if (job) why = 'Улучшение уже идёт';
   else if (state.buildings.hq < (d.unlockHq ?? 1)) why = `${d.name} — с командного пункта ${d.unlockHq} уровня`;
+  else if (k === 'hq' && state.commander.level < hqCommanderLevel(lvl)) why = `Нужен ${hqCommanderLevel(lvl)} уровень командира — опыт дают походы`;
   else if (busy) why = 'Бригада занята другим зданием — строим по одному';
   else if (k !== 'hq' && lvl + 1 > state.buildings.hq) why = `Сначала нужен командный пункт ${lvl + 1} уровня`;
   else if (!affordable) why = 'Не хватает ресурсов';

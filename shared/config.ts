@@ -38,111 +38,117 @@ export interface BuildingDef {
 export const BUILDINGS: Record<BuildingKey, BuildingDef> = {
   hq: {
     name: 'Командный пункт',
-    purpose: 'Задаёт максимальный уровень остальных зданий. На 4 уровне открывает второй одновременный поход.',
+    purpose: 'Задаёт максимальный уровень остальных зданий. На 4 уровне открывает второй одновременный поход. Растёт вместе с командиром: каждый следующий уровень требует опыта походов.',
     baseCost: { supplies: 100, parts: 80 },
-    costGrowth: 1.5,
-    baseTime: 20,
-    timeGrowth: 1.8,
+    costGrowth: 1.85,
+    baseTime: 60,
+    timeGrowth: 2.55,
   },
   training: {
     name: 'Центр подготовки',
     purpose: 'Обучение операторов и повышение ранга специализаций. Уровень сокращает время подготовки и открывает новые специализации.',
     baseCost: { supplies: 120, parts: 90 },
-    costGrowth: 1.5,
-    baseTime: 25,
-    timeGrowth: 1.75,
+    costGrowth: 1.85,
+    baseTime: 50,
+    timeGrowth: 2.5,
   },
   workshop: {
     name: 'Мастерская БПЛА',
     purpose: 'Производит комплектующие, собирает оснащение и обслуживает транспорт.',
     baseCost: { supplies: 90, parts: 60 },
-    costGrowth: 1.5,
-    baseTime: 20,
-    timeGrowth: 1.75,
+    costGrowth: 1.85,
+    baseTime: 40,
+    timeGrowth: 2.5,
   },
   supply: {
     name: 'Пункт снабжения',
     purpose: 'Производит припасы и увеличивает их вместимость.',
     baseCost: { supplies: 60, parts: 60 },
-    costGrowth: 1.5,
-    baseTime: 15,
-    timeGrowth: 1.75,
+    costGrowth: 1.85,
+    baseTime: 30,
+    timeGrowth: 2.5,
   },
   fueldepot: {
     name: 'Склад ГСМ',
     purpose: 'Производит и хранит топливо.',
     baseCost: { supplies: 70, parts: 50 },
-    costGrowth: 1.5,
-    baseTime: 15,
-    timeGrowth: 1.75,
+    costGrowth: 1.85,
+    baseTime: 30,
+    timeGrowth: 2.5,
   },
   comms: {
     name: 'Узел связи',
     purpose: 'Открывает новые секторы, усиливает разведку и увеличивает получаемые данные.',
     baseCost: { supplies: 90, parts: 70, data: 10 },
-    costGrowth: 1.5,
-    baseTime: 25,
-    timeGrowth: 1.75,
+    costGrowth: 1.85,
+    baseTime: 50,
+    timeGrowth: 2.5,
   },
   motorpool: {
     name: 'Автопарк',
     purpose: 'Боксы и яма для техники. Улучшение транспорта дешевле; на 3 уровне открывает пикап.',
     baseCost: { supplies: 150, parts: 200, fuel: 50 },
-    costGrowth: 1.5,
-    baseTime: 60,
-    timeGrowth: 1.7,
+    costGrowth: 1.62,
+    baseTime: 240,
+    timeGrowth: 2.1,
     unlockHq: 3,
   },
   repairyard: {
     name: 'Ремонтная зона',
     purpose: 'Ремонт техники, оснащения и моделей дронов дешевле, износ в походах меньше.',
     baseCost: { supplies: 150, parts: 220 },
-    costGrowth: 1.5,
-    baseTime: 60,
-    timeGrowth: 1.7,
+    costGrowth: 1.62,
+    baseTime: 240,
+    timeGrowth: 2.1,
     unlockHq: 3,
   },
   medbay: {
     name: 'Медпункт',
     purpose: 'Раненые встают быстрее и дешевле, сводит шрамы бойцам.',
     baseCost: { supplies: 250, parts: 150 },
-    costGrowth: 1.5,
-    baseTime: 60,
-    timeGrowth: 1.7,
+    costGrowth: 1.62,
+    baseTime: 240,
+    timeGrowth: 2.1,
     unlockHq: 4,
   },
   analytics: {
     name: 'Аналитический центр',
     purpose: 'Точнее прогноз, больше данных; расшифровывает трофейные данные в чертежи деталей.',
     baseCost: { supplies: 200, parts: 250, data: 40 },
-    costGrowth: 1.5,
-    baseTime: 90,
-    timeGrowth: 1.7,
+    costGrowth: 1.62,
+    baseTime: 240,
+    timeGrowth: 2.1,
     unlockHq: 5,
   },
   testrange: {
     name: 'Полигон испытаний',
     purpose: 'Здесь собирают и обкатывают свои модели дронов. Каждый уровень усиливает модели.',
     baseCost: { supplies: 180, parts: 260, data: 20 },
-    costGrowth: 1.5,
-    baseTime: 75,
-    timeGrowth: 1.7,
+    costGrowth: 1.62,
+    baseTime: 240,
+    timeGrowth: 2.1,
     unlockHq: 4,
   },
   defense: {
     name: 'Оборона полигона',
     purpose: 'Посты наблюдения, РЭБ-купол и дежурные расчёты. Отбивает атаки противника на полигон и набеги других командиров.',
     baseCost: { supplies: 80, parts: 90 },
-    costGrowth: 1.5,
-    baseTime: 20,
-    timeGrowth: 1.75,
+    costGrowth: 1.85,
+    baseTime: 40,
+    timeGrowth: 2.5,
   },
 };
+
+/** Командный пункт растёт вместе с командиром: улучшение L → L+1 — с уровня командира L−1. */
+export function hqCommanderLevel(level: number): number {
+  return Math.max(1, level - 1);
+}
 
 /** Цена улучшения с уровня `level` на `level + 1`. */
 export function buildingUpgradeCost(key: BuildingKey, level: number): Cost {
   const d = BUILDINGS[key];
-  const k = level <= 0 ? 0.8 : Math.pow(d.costGrowth, level - 1);
+  // на верхних уровнях дороже: к 10 уровню ещё ×1.8 — ресурсы нужно добывать походами
+  const k = level <= 0 ? 0.8 : Math.pow(d.costGrowth, level - 1) * (1 + 0.1 * (level - 1));
   const out: Cost = {};
   for (const r of RES_KEYS) if (d.baseCost[r]) out[r] = Math.round(d.baseCost[r]! * k);
   return out;
@@ -154,9 +160,9 @@ export function buildingUpgradeTime(key: BuildingKey, level: number): number {
 
 /* Производство и хранение */
 export const PRODUCTION: Record<'supplies' | 'parts' | 'fuel', { building: BuildingKey; base: number; growth: number }> = {
-  supplies: { building: 'supply', base: 180, growth: 1.25 }, // в час
-  parts: { building: 'workshop', base: 120, growth: 1.25 },
-  fuel: { building: 'fueldepot', base: 120, growth: 1.25 },
+  supplies: { building: 'supply', base: 100, growth: 1.2 }, // в час
+  parts: { building: 'workshop', base: 70, growth: 1.2 },
+  fuel: { building: 'fueldepot', base: 70, growth: 1.2 },
 };
 export const PRODUCED_KEYS = ['supplies', 'parts', 'fuel'] as const;
 export function productionPerHour(res: 'supplies' | 'parts' | 'fuel', level: number): number {
@@ -164,7 +170,7 @@ export function productionPerHour(res: 'supplies' | 'parts' | 'fuel', level: num
   return Math.round(p.base * Math.pow(p.growth, level - 1));
 }
 export function storageCap(level: number): number {
-  return Math.round(600 * Math.pow(1.4, level - 1) / 10) * 10;
+  return Math.round(1000 * Math.pow(1.55, level - 1) / 10) * 10;
 }
 
 export const HQ_SECOND_SLOT_LEVEL = 4;
@@ -238,7 +244,7 @@ export const OPERATORS: Record<OperatorType, OperatorDef> = {
     strong: 'Разведка и обнаружение наград',
     weak: 'Слабее в сложных столкновениях',
     cost: { supplies: 40 },
-    time: 15,
+    time: 60,
     power: 2,
     recon: 3,
     exposure: 1.3,
@@ -251,8 +257,8 @@ export const OPERATORS: Record<OperatorType, OperatorDef> = {
     role: 'Основной атакующий класс',
     strong: 'Высокий вклад в боевой рейтинг',
     weak: 'Требует больше комплектующих',
-    cost: { supplies: 60, parts: 30 },
-    time: 25,
+    cost: { supplies: 70, parts: 40 },
+    time: 240,
     power: 6,
     recon: 0.5,
     exposure: 1.0,
@@ -265,8 +271,8 @@ export const OPERATORS: Record<OperatorType, OperatorDef> = {
     role: 'Поддержка группы',
     strong: 'Бонус к сложным PvE-заданиям',
     weak: 'Высокая стоимость и время подготовки',
-    cost: { supplies: 120, parts: 80 },
-    time: 60,
+    cost: { supplies: 150, parts: 110 },
+    time: 600,
     power: 9,
     recon: 1,
     exposure: 0.8,
@@ -279,8 +285,8 @@ export const OPERATORS: Record<OperatorType, OperatorDef> = {
     role: 'Редкая специализация',
     strong: 'Бонус к длительным походам и особым целям',
     weak: 'Позднее открытие, высокий расход припасов',
-    cost: { supplies: 200, parts: 150, data: 20 },
-    time: 120,
+    cost: { supplies: 260, parts: 200, data: 30 },
+    time: 1500,
     power: 12,
     recon: 1.5,
     exposure: 0.9,
@@ -307,8 +313,8 @@ export const OPERATORS: Record<OperatorType, OperatorDef> = {
 
 /** Тяжёлый БПЛА: +5% к силе группы за оператора в сложных заданиях (опорный пункт или сложность ≥ 3), до +25%. */
 export const HEAVY_HARD_BONUS = { perUnit: 0.05, max: 0.25, minDifficulty: 3 };
-/** «Баба-яга»: +6% за оператора в длительных походах (≥ 5 мин) и особых целях (опорный пункт, событийная зона), до +30%. */
-export const BABAYAGA_BONUS = { perUnit: 0.06, max: 0.3, longSeconds: 300 };
+/** «Баба-яга»: +6% за оператора в длительных походах (≥ 30 мин) и особых целях (опорный пункт, событийная зона), до +30%. */
+export const BABAYAGA_BONUS = { perUnit: 0.06, max: 0.3, longSeconds: 1800 };
 /** «Бывший штурмовик»: −4% к потерям всей группы за бойца, до −16%. */
 export const VETERAN_BONUS = { perUnit: 0.04, max: 0.16 };
 
@@ -326,24 +332,24 @@ function unlockedOperatorNames(trainingLevel: number): string[] {
 }
 export function trainTime(type: OperatorType, trainingLevel: number): number {
   const k = 1 - Math.min(0.5, (trainingLevel - 1) * TRAINING_SPEED_PER_LEVEL);
-  return Math.max(5, Math.round(OPERATORS[type].time * k));
+  return Math.max(30, Math.round(OPERATORS[type].time * k));
 }
 
 /** Ранг специализации 1–5: +10% к силе и разведке за ранг выше 1. */
 export const MAX_RANK = 5;
 export const RANK_BONUS = 0.1;
 export function rankUpgradeCost(type: OperatorType, toRank: number): Cost {
-  const k = Math.pow(1.8, toRank - 2);
+  const k = Math.pow(2.2, toRank - 2);
   const base = OPERATORS[type].award ? { supplies: 80 } : OPERATORS[type].cost;
   return {
-    supplies: Math.round((base.supplies ?? 0) * 1.5 * k),
-    parts: Math.round(60 * k),
-    data: Math.round(10 * Math.pow(2, toRank - 2)),
+    supplies: Math.round((base.supplies ?? 0) * 3 * k),
+    parts: Math.round(150 * k),
+    data: Math.round(25 * Math.pow(2.2, toRank - 2)),
   };
 }
 export function rankUpgradeTime(toRank: number, trainingLevel: number): number {
   const k = 1 - Math.min(0.5, (trainingLevel - 1) * TRAINING_SPEED_PER_LEVEL);
-  return Math.round(40 * Math.pow(1.8, toRank - 2) * k);
+  return Math.round(900 * Math.pow(2, toRank - 2) * k);
 }
 /** Для ранга R нужен центр подготовки уровня 2R − 2. */
 export function rankRequiredTraining(toRank: number): number {
@@ -357,7 +363,7 @@ export function recoveryCost(counts: Partial<Record<OperatorType, number>>, logi
   return { supplies: Math.round(s * (1 - SKILL_EFFECTS.medic * logisticsRank)) };
 }
 export function recoveryTime(total: number, logisticsRank: number): number {
-  return Math.round((10 + 8 * total) * (1 - SKILL_EFFECTS.medic * logisticsRank));
+  return Math.round((60 + 90 * total) * (1 - SKILL_EFFECTS.medic * logisticsRank));
 }
 
 /* ───────────────────────────── Транспорт ───────────────────────────── */
@@ -393,7 +399,7 @@ export const VEHICLES: Record<VehicleType, VehicleDef> = {
     purpose: 'Экономичная разведка: меньше расход топлива, бонус к разведке',
     unlockHq: 2,
     acquireCost: { supplies: 30, parts: 60 },
-    acquireTime: 20,
+    acquireTime: 90,
     fuelMul: 1,
     sprite: 1,
   },
@@ -401,8 +407,8 @@ export const VEHICLES: Record<VehicleType, VehicleDef> = {
     name: 'УАЗ «Буханка»',
     purpose: 'Универсальная группа: больше вместимость и объём добычи',
     unlockHq: 3,
-    acquireCost: { supplies: 120, parts: 200, fuel: 40 },
-    acquireTime: 60,
+    acquireCost: { supplies: 300, parts: 500, fuel: 120 },
+    acquireTime: 1800,
     fuelMul: 1.5,
     sprite: 2,
   },
@@ -410,8 +416,8 @@ export const VEHICLES: Record<VehicleType, VehicleDef> = {
     name: 'Пикап',
     purpose: 'Экспедиции и вывоз наград: больше добычи, +1 место в группе. Нужен автопарк 3 уровня',
     unlockHq: 4,
-    acquireCost: { supplies: 250, parts: 400, fuel: 100 },
-    acquireTime: 120,
+    acquireCost: { supplies: 900, parts: 1500, fuel: 400 },
+    acquireTime: 5400,
     fuelMul: 1.25,
     sprite: 3,
   },
@@ -475,10 +481,10 @@ export function vehicleBonusText(type: VehicleType, level: number): string {
 }
 export function vehicleUpgradeCost(level: number): Cost {
   const k = Math.pow(1.6, level - 1);
-  return { parts: Math.round(80 * k), supplies: Math.round(40 * k) };
+  return { parts: Math.round(200 * k), supplies: Math.round(100 * k) };
 }
 export function vehicleUpgradeTime(level: number): number {
-  return Math.round(30 * Math.pow(1.6, level - 1));
+  return Math.round(900 * Math.pow(2.2, level - 1));
 }
 /** Для улучшения транспорта до уровня L нужна мастерская уровня L. */
 export function vehicleUpgradeRequiredWorkshop(toLevel: number): number {
@@ -487,7 +493,7 @@ export function vehicleUpgradeRequiredWorkshop(toLevel: number): number {
 export function vehicleRepairCost(level: number): Cost {
   return { parts: 30 + 15 * level, supplies: 20 };
 }
-export const VEHICLE_REPAIR_TIME = 40;
+export const VEHICLE_REPAIR_TIME = 600;
 
 /* ───────────────────────────── Оснащение ───────────────────────────── */
 
@@ -567,9 +573,9 @@ export function equipmentEffectText(type: EquipmentType, rarity: Rarity, level: 
   return d.extra ? `${main}; ${kindText(d.extra.kind, Math.round(d.extra.value * (1 + 0.1 * (level - 1)) * 100))}` : main;
 }
 export const CRAFT: Record<CraftRarity, { cost: Cost; time: number }> = {
-  common: { cost: { supplies: 40, parts: 80 }, time: 30 },
-  improved: { cost: { supplies: 80, parts: 200, data: 20 }, time: 90 },
-  rare: { cost: { supplies: 150, parts: 450, data: 60 }, time: 240 },
+  common: { cost: { supplies: 60, parts: 120 }, time: 300 },
+  improved: { cost: { supplies: 160, parts: 400, data: 40 }, time: 1800 },
+  rare: { cost: { supplies: 400, parts: 1200, data: 150 }, time: 7200 },
 };
 export function equipmentUpgradeCost(rarity: Rarity, level: number): Cost {
   const r = { common: 1, improved: 1.6, rare: 2.4, award: 2 }[rarity];
@@ -601,7 +607,7 @@ export const AWARD_SOURCE_NAME = 'сайт «Учёт дронов»';
 
 export const COMMANDER_MAX_LEVEL = 10;
 /** Опыт, нужный для достижения уровня (индекс = уровень − 1). */
-export const XP_THRESHOLDS = [0, 80, 200, 380, 620, 950, 1400, 2000, 2800, 3800];
+export const XP_THRESHOLDS = [0, 150, 500, 1200, 2400, 4200, 6800, 10400, 15200, 21500];
 export function commanderLevel(xp: number): number {
   let l = 1;
   for (let i = 0; i < XP_THRESHOLDS.length; i++) if (xp >= XP_THRESHOLDS[i]) l = i + 1;
@@ -679,7 +685,7 @@ export const MISSIONS: Record<MissionType, MissionDef> = {
   raid: { name: 'Рейд', desc: 'Автоматическое столкновение за припасы и комплектующие. Повышает контроль сектора.', timeMul: 1.2, fuelMul: 1.2, enemyMul: 1, lossMul: 1, combat: true, minRecon: 0 },
   stronghold: { name: 'Опорный пункт', desc: 'Повышенная сложность и награда, шанс получить оснащение. Нужна разведанность от 50%.', timeMul: 1.6, fuelMul: 1.5, enemyMul: 1.8, lossMul: 1.25, combat: true, minRecon: 50 },
   supply: { name: 'Снабжение', desc: 'Спокойное задание: упор на транспорт и добычу топлива.', timeMul: 1.1, fuelMul: 0.8, enemyMul: 0.5, lossMul: 0.5, combat: true, minRecon: 0 },
-  expedition: { name: 'Экспедиция', desc: 'Длительный поход на несколько часов: отправил утром — забрал вечером. Награда примерно в 8 раз больше рейда.', timeMul: 60, fuelMul: 3, enemyMul: 0.9, lossMul: 0.6, combat: true, minRecon: 30 },
+  expedition: { name: 'Экспедиция', desc: 'Длительный поход на несколько часов: отправил утром — забрал вечером. Награда примерно в 8 раз больше рейда.', timeMul: 6, fuelMul: 3, enemyMul: 0.9, lossMul: 0.6, combat: true, minRecon: 30 },
   pvp: { name: 'Набег', desc: 'Набег на полигон другого командира.', timeMul: 1, fuelMul: 1, enemyMul: 1, lossMul: 1.1, combat: true, minRecon: 0 },
 };
 export const SECTOR_MISSIONS: Record<SectorType, MissionType[]> = {
@@ -706,18 +712,18 @@ export interface SectorDef {
 }
 export const HOME = { x: 50, y: 92, name: 'Тыловой полигон' };
 export const SECTORS: SectorDef[] = [
-  { id: 1, name: 'Лесополоса', type: 'observation', difficulty: 1, x: 36, y: 76, links: [0, 2, 4], comms: 1, after: [], baseTime: 60, fuel: 8, rewardMul: 1 },
-  { id: 2, name: 'Старая ферма', type: 'warehouse', difficulty: 1, x: 60, y: 74, links: [0, 1, 3, 5], comms: 1, after: [1], baseTime: 75, fuel: 10, rewardMul: 1 },
-  { id: 3, name: 'Грунтовка Б-3', type: 'route', difficulty: 1, x: 80, y: 80, links: [0, 2, 7], comms: 2, after: [2], baseTime: 90, fuel: 10, rewardMul: 1 },
-  { id: 4, name: 'Водонапорная башня', type: 'observation', difficulty: 2, x: 20, y: 60, links: [1, 5, 9], comms: 2, after: [1], baseTime: 120, fuel: 14, rewardMul: 1 },
-  { id: 5, name: 'Элеватор', type: 'warehouse', difficulty: 2, x: 48, y: 58, links: [2, 4, 6, 8], comms: 2, after: [1, 2], baseTime: 150, fuel: 16, rewardMul: 1 },
-  { id: 6, name: 'Высота 112', type: 'stronghold', difficulty: 3, x: 66, y: 50, links: [5, 7, 10], comms: 3, after: [5], baseTime: 210, fuel: 22, rewardMul: 1.1 },
-  { id: 7, name: 'Речной переезд', type: 'route', difficulty: 3, x: 86, y: 58, links: [3, 6, 10], comms: 3, after: [3, 6], baseTime: 240, fuel: 24, rewardMul: 1 },
-  { id: 8, name: 'Карьер', type: 'event', difficulty: 3, x: 34, y: 42, links: [5, 9, 11], comms: 4, after: [5], baseTime: 300, fuel: 26, rewardMul: 1.5 },
-  { id: 9, name: 'Посадка Дубовая', type: 'observation', difficulty: 4, x: 14, y: 34, links: [4, 8, 11], comms: 4, after: [4, 8], baseTime: 360, fuel: 30, rewardMul: 1 },
-  { id: 10, name: 'Депо', type: 'warehouse', difficulty: 4, x: 74, y: 30, links: [6, 7, 12], comms: 5, after: [6], baseTime: 420, fuel: 34, rewardMul: 1.1 },
-  { id: 11, name: 'Узел Северный', type: 'stronghold', difficulty: 5, x: 40, y: 22, links: [8, 9, 12], comms: 6, after: [8, 9], baseTime: 540, fuel: 40, rewardMul: 1.2 },
-  { id: 12, name: 'Терриконы', type: 'stronghold', difficulty: 6, x: 62, y: 10, links: [10, 11], comms: 7, after: [10, 11], baseTime: 720, fuel: 48, rewardMul: 1.3 },
+  { id: 1, name: 'Лесополоса', type: 'observation', difficulty: 1, x: 36, y: 76, links: [0, 2, 4], comms: 1, after: [], baseTime: 120, fuel: 8, rewardMul: 1 },
+  { id: 2, name: 'Старая ферма', type: 'warehouse', difficulty: 1, x: 60, y: 74, links: [0, 1, 3, 5], comms: 1, after: [1], baseTime: 180, fuel: 10, rewardMul: 1 },
+  { id: 3, name: 'Грунтовка Б-3', type: 'route', difficulty: 1, x: 80, y: 80, links: [0, 2, 7], comms: 2, after: [2], baseTime: 240, fuel: 10, rewardMul: 1 },
+  { id: 4, name: 'Водонапорная башня', type: 'observation', difficulty: 2, x: 20, y: 60, links: [1, 5, 9], comms: 2, after: [1], baseTime: 600, fuel: 14, rewardMul: 1 },
+  { id: 5, name: 'Элеватор', type: 'warehouse', difficulty: 2, x: 48, y: 58, links: [2, 4, 6, 8], comms: 2, after: [1, 2], baseTime: 720, fuel: 16, rewardMul: 1 },
+  { id: 6, name: 'Высота 112', type: 'stronghold', difficulty: 3, x: 66, y: 50, links: [5, 7, 10], comms: 3, after: [5], baseTime: 1500, fuel: 22, rewardMul: 1.1 },
+  { id: 7, name: 'Речной переезд', type: 'route', difficulty: 3, x: 86, y: 58, links: [3, 6, 10], comms: 3, after: [3, 6], baseTime: 1800, fuel: 24, rewardMul: 1 },
+  { id: 8, name: 'Карьер', type: 'event', difficulty: 3, x: 34, y: 42, links: [5, 9, 11], comms: 4, after: [5], baseTime: 2100, fuel: 26, rewardMul: 1.5 },
+  { id: 9, name: 'Посадка Дубовая', type: 'observation', difficulty: 4, x: 14, y: 34, links: [4, 8, 11], comms: 4, after: [4, 8], baseTime: 3000, fuel: 30, rewardMul: 1 },
+  { id: 10, name: 'Депо', type: 'warehouse', difficulty: 4, x: 74, y: 30, links: [6, 7, 12], comms: 5, after: [6], baseTime: 3600, fuel: 34, rewardMul: 1.1 },
+  { id: 11, name: 'Узел Северный', type: 'stronghold', difficulty: 5, x: 40, y: 22, links: [8, 9, 12], comms: 6, after: [8, 9], baseTime: 5400, fuel: 40, rewardMul: 1.2 },
+  { id: 12, name: 'Терриконы', type: 'stronghold', difficulty: 6, x: 62, y: 10, links: [10, 11], comms: 7, after: [10, 11], baseTime: 9000, fuel: 48, rewardMul: 1.3 },
 ];
 export function sectorById(id: number): SectorDef | undefined {
   return SECTORS.find((s) => s.id === id);
@@ -778,15 +784,15 @@ export function missionRewards(mission: MissionType, difficulty: number): Cost {
   const d = difficulty;
   switch (mission) {
     case 'recon':
-      return { data: Math.round(12 * Math.pow(d, 1.2)), supplies: 20 * d };
+      return { data: Math.round(12 * d), supplies: 20 * d };
     case 'raid':
-      return { supplies: Math.round(70 * Math.pow(d, 1.3)), parts: Math.round(50 * Math.pow(d, 1.3)), data: 2 * d };
+      return { supplies: Math.round(70 * Math.pow(d, 0.9)), parts: Math.round(50 * Math.pow(d, 0.9)), data: 2 * d };
     case 'stronghold':
-      return { parts: Math.round(120 * Math.pow(d, 1.3)), data: Math.round(25 * Math.pow(d, 1.2)), supplies: 60 * d };
+      return { parts: Math.round(120 * Math.pow(d, 0.95)), data: Math.round(20 * d), supplies: Math.round(60 * Math.pow(d, 0.9)) };
     case 'supply':
-      return { fuel: Math.round(60 * Math.pow(d, 1.2)), supplies: 40 * d };
+      return { fuel: Math.round(60 * Math.pow(d, 0.9)), supplies: Math.round(40 * Math.pow(d, 0.9)) };
     case 'expedition':
-      return { supplies: Math.round(420 * Math.pow(d, 1.15)), parts: Math.round(320 * Math.pow(d, 1.15)), fuel: Math.round(160 * d), data: Math.round(20 * d) };
+      return { supplies: Math.round(380 * Math.pow(d, 0.85)), parts: Math.round(290 * Math.pow(d, 0.85)), fuel: Math.round(140 * Math.pow(d, 0.85)), data: Math.round(15 * d) };
     case 'pvp':
       return {};
   }
@@ -809,8 +815,8 @@ export interface TutorialStep {
   focus?: string;
 }
 export const TUTORIAL: TutorialStep[] = [
-  { title: 'Улучшите командный пункт', text: 'С прибытием, командир! Начнём со штаба: пока он маленький, остальные здания выше не вырастут. Поднимите командный пункт до 2 уровня — это секунд двадцать.', reward: { parts: 50 }, goto: 'base', focus: 'hq' },
-  { title: 'Подготовьте разведчика', text: 'Двоих разведчиков мало, чтобы что-то увидеть. Дайте мне сорок припасов — и через пятнадцать секунд будет третий.', reward: { supplies: 50, data: 10 }, goto: 'squad', focus: 'scout' },
+  { title: 'Улучшите командный пункт', text: 'С прибытием, командир! Начнём со штаба: пока он маленький, остальные здания выше не вырастут. Поднимите командный пункт до 2 уровня — это всего минута.', reward: { parts: 50 }, goto: 'base', focus: 'hq' },
+  { title: 'Подготовьте разведчика', text: 'Двоих разведчиков мало, чтобы что-то увидеть. Дайте мне сорок припасов — и через минуту будет третий.', reward: { supplies: 50, data: 10 }, goto: 'squad', focus: 'scout' },
   { title: 'Выберите транспорт', text: 'Мотоцикл — это хорошо, но для разведки нужен электровелосипед: тихий и экономный. Загляни в автопарк, я соберу.', reward: { fuel: 60 }, goto: 'squad', focus: 'ebike' },
   { title: 'Первое задание', text: 'Первая вылазка! Сектор 01, «Лесополоса», — тихое место. Отправь туда разведчиков на велосипеде и дождись отчёта.', reward: { data: 20, supplies: 40 }, goto: 'map', focus: 'sector-1' },
   { title: 'Откройте операторов FPV', text: 'Разведка — это глаза. А теперь нужны руки: поднимите центр подготовки до 2 уровня, и я начну учить FPV-операторов.', reward: { parts: 60 }, goto: 'base', focus: 'training' },

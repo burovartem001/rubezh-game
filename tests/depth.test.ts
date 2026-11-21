@@ -97,7 +97,7 @@ test('здания с нуля, модели дронов, износ и рем�
   assert.equal((await act(a.token, 'buildModel', { cls: 'fpv', name: 'Шершень', color: '#6b7a3c', parts: { frame: 'f_std', motors: 'm_std', battery: 'b_std', camera: 'c_std', payload: 'p_std', link: 'l_std' } })).status, 400, 'без полигона испытаний модель не собрать');
   r = await act(a.token, 'build', { building: 'testrange' });
   assert.equal(r.status, 200, JSON.stringify(r.body));
-  await travel(a.id, 200);
+  await travel(a.id, 200 * 30);
   r = await call(a.token, 'state');
   assert.equal(r.body.buildings.testrange, 1);
 
@@ -109,12 +109,12 @@ test('здания с нуля, модели дронов, износ и рем�
   assert.equal((await act(a.token, 'campaignAck', { key: 'c1s' })).status, 400, 'сцену не принять дважды');
   r = await act(a.token, 'train', { type: 'fpv', count: 3 });
   assert.equal(r.status, 200, JSON.stringify(r.body));
-  await travel(a.id, 400);
+  await travel(a.id, 400 * 30);
   r = await act(a.token, 'dispatch', { sectorId: 1, campaign: 'c1m1', group: { scout: 1, fpv: 1 }, vehicle: 'moto', equipment: [] });
   assert.equal(r.status, 400, 'в миссии только разведчики');
   r = await act(a.token, 'dispatch', { sectorId: 1, campaign: 'c1m1', group: { scout: 2 }, vehicle: 'moto', equipment: [] });
   assert.equal(r.status, 200, JSON.stringify(r.body));
-  await travel(a.id, 4000);
+  await travel(a.id, 4000 * 30);
   r = await call(a.token, 'state');
   const step = r.body.campaign.step;
   const camRep = r.body.reports.find((x: any) => x.campaign);
@@ -126,7 +126,7 @@ test('здания с нуля, модели дронов, износ и рем�
   assert.equal(r.status, 400, 'без чертежа карбоновую раму не поставить');
   r = await act(a.token, 'buildModel', { cls: 'fpv', name: 'Шершень', color: '#6b7a3c', parts: { frame: 'f_heavy', motors: 'm_torque', battery: 'b_ext', camera: 'c_zoom', payload: 'p_heavy', link: 'l_long' } });
   assert.equal(r.status, 200, JSON.stringify(r.body));
-  await travel(a.id, 400);
+  await travel(a.id, 400 * 30);
   r = await call(a.token, 'state');
   const model = r.body.models.find((m: any) => m.cls === 'fpv');
   assert.ok(model && model.durability === 100, 'модель собрана');
@@ -134,10 +134,10 @@ test('здания с нуля, модели дронов, износ и рем�
 
   // поход с моделью: в причинах есть модель, после — износ модели
   await db.query(`UPDATE sectors SET recon=60 WHERE user_id=$1 AND sector_id=1`, [a.id]);
-  await db.query(`UPDATE drone_models SET built_at = built_at - interval '1 day' WHERE user_id=$1`, [a.id]); // тест сдвигает время похода назад
+  await db.query(`UPDATE drone_models SET built_at = built_at - interval '5 days' WHERE user_id=$1`, [a.id]); // тест сдвигает время похода назад
   r = await act(a.token, 'dispatch', { sectorId: 1, mission: 'raid', group: { fpv: 3 }, vehicle: 'moto', equipment: [] });
   assert.equal(r.status, 200, JSON.stringify(r.body));
-  await travel(a.id, 4000);
+  await travel(a.id, 4000 * 30);
   r = await call(a.token, 'state');
   const rep = r.body.reports.find((x: any) => x.mission === 'raid');
   assert.ok(rep.reasons.some((x: any) => /Модели дронов/.test(x.text)), 'модель влияет на расчёт и видна в отчёте');
@@ -181,7 +181,7 @@ test('здания с нуля, модели дронов, износ и рем�
   await db.query(`UPDATE sectors SET control=80, control_at=now() WHERE user_id=$1 AND sector_id=1`, [a.id]);
   r = await act(a.token, 'outpostBuild', { sectorId: 1 });
   assert.equal(r.status, 200, JSON.stringify(r.body));
-  await travel(a.id, 1000);
+  await travel(a.id, 1000 * 30);
   r = await call(a.token, 'state');
   assert.equal(r.body.outposts.length, 1);
   r = await act(a.token, 'dispatch', { sectorId: 2, mission: 'recon', group: { scout: 1 }, vehicle: 'moto', equipment: [] });
@@ -227,7 +227,7 @@ test('событие выходных: ступени наград забира�
 test('кампания: выбор с ценой нельзя сделать без ресурсов, сюжет идёт по шагам', async () => {
   const a = await player('Сюжет-' + (Date.now() % 10000));
   const idx = CAMPAIGN.findIndex((s) => s.key === 'c3c');
-  await db.query(`UPDATE players SET campaign=$2, supplies=100 WHERE user_id=$1`, [a.id, JSON.stringify({ step: idx, flags: {} })]);
+  await db.query(`UPDATE players SET campaign=$2, supplies=100, cmd_level=5, cmd_xp=2500 WHERE user_id=$1`, [a.id, JSON.stringify({ step: idx, flags: {} })]);
   let r = await act(a.token, 'campaignChoose', { key: 'c3c', option: 'help' });
   assert.equal(r.status, 400, 'не хватает припасов на помощь соседям');
   r = await call(a.token, 'state');
