@@ -10,9 +10,12 @@ import {
 } from '../../../shared/chevrons';
 import {
   HOT_WINDOW, PRESTIGE_LEVEL, PRESTIGE_MAX, PVP, RESEARCH, RESEARCH_BRANCHES, RESEARCH_COST, SEASON_STORY, SOLDIER_LEVELS, SOLDIER_MAX_LEVEL, STREAK_REWARDS,
-  TRAITS, composeParts, dispatchParts, mapEventAt, modsText, prestigeMods, researchPrereq, seasonTheme,
+  TRAITS, composeParts, countBondPairs, dispatchParts, mapEventAt, modsText, prestigeMods, researchPrereq, seasonTheme,
 } from '../../../shared/progression';
 import { COMMANDER_TITLES } from '../../../shared/lore';
+import { fatigueNow } from '../../../shared/content';
+import { deepParts } from '../../../shared/deepcalc';
+import { SoldierDeep } from './Deep';
 import { CompanyDetail, CompanyListItem, GameState, LeaderRow, PvpTarget, Soldier, api } from '../api';
 import { useGame } from '../game';
 import { Bar, Button, Countdown, CostLine, JobProgress, RewardLine, Sheet, Sprite, Stepper, fmtDur, fmtLong, useAffordable } from '../ui';
@@ -27,18 +30,21 @@ function fmtLeft(sec: number): string {
 const fmtDate = (ms: number) => new Date(ms).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' });
 
 /** Лучшие свободные бойцы под состав — так же, как выбирает сервер. */
-export function pickSoldiersClient(state: GameState, group: Group): Soldier[] {
+export function pickSoldiersClient(state: GameState, group: Group, now = Date.now()): Soldier[] {
   const out: Soldier[] = [];
+  const score = (s: Soldier) => (s.instructor ? -1000 : 0) + s.level * 10 - fatigueNow(s.fatigue, s.fatigue_at, now) / 10;
   for (const t of OPERATOR_TYPES) {
     const n = group[t] ?? 0;
     if (!n) continue;
-    out.push(...state.soldiers.filter((s) => s.type === t && s.status === 'ready').sort((a, b) => b.level - a.level || b.xp - a.xp).slice(0, n));
+    out.push(...state.soldiers.filter((s) => s.type === t && s.status === 'ready').sort((a, b) => score(b) - score(a) || b.xp - a.xp).slice(0, n));
   }
   return out;
 }
-export function bonusFor(state: GameState, sectorId: number, now: number, group: Group) {
-  const chosen = pickSoldiersClient(state, group).map((s) => ({ type: s.type, level: s.level, trait: s.trait }));
-  return composeParts(dispatchParts(state.modParts, sectorId, now, chosen));
+export function bonusFor(state: GameState, sectorId: number, now: number, group: Group, night = false) {
+  const picked = pickSoldiersClient(state, group, now);
+  const chosen = picked.map((s) => ({ type: s.type, level: s.level, trait: s.trait, spec: s.spec, fatigue: fatigueNow(s.fatigue, s.fatigue_at, now) }));
+  const extra = deepParts({ models: state.models, outposts: state.outposts, testrange: state.buildings.testrange ?? 0 }, sectorId, group, now, night);
+  return composeParts(dispatchParts(state.modParts, sectorId, now, chosen, countBondPairs(picked), extra));
 }
 
 /* ═════════════ Полигон: штаб — серия, контракты, сезон, исследования, оборона ═════════════ */
@@ -333,11 +339,14 @@ export function SoldierRoster({ type }: { type: OperatorType }) {
                 {s.scars ? ` · шрамов ${s.scars}` : ''}
               </small>
               {s.level < SOLDIER_MAX_LEVEL && <Bar value={s.xp - SOLDIER_LEVELS[s.level - 1]} max={SOLDIER_LEVELS[s.level] - SOLDIER_LEVELS[s.level - 1]} />}
+              <SoldierDeep s={s} />
             </span>
           </div>
         ))}
       </div>
-      <p className="tiny muted">В поход уходят самые опытные. Опыт и черты бойцов дают группе бонусы — смотрите прогноз.</p>
+      <p className="tiny muted">
+        В поход уходят самые опытные и отдохнувшие. С 3 уровня боец выбирает специализацию, с 5 — может стать инструктором (подготовка быстрее). Бойцы, прошедшие вместе 10 походов, работают как расчёт.
+      </p>
     </details>
   );
 }

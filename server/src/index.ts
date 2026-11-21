@@ -128,10 +128,11 @@ api.get('/players/:id', requireAuth, async (req: AuthedRequest, res) => {
   if (!Number.isInteger(id) || id < 1) return res.status(400).json({ error: 'Неверный игрок' });
   const p = await pool.query('SELECT user_id, callsign, commander_name, portrait, chevron, cmd_level, cmd_xp, stats, created_at FROM players WHERE user_id=$1', [id]);
   if (!p.rowCount) return res.status(404).json({ error: 'Игрок не найден' });
-  const [ch, aw, sec] = await Promise.all([
+  const [ch, aw, sec, md] = await Promise.all([
     pool.query('SELECT chevron, source, created_at FROM player_chevrons WHERE user_id=$1 ORDER BY created_at, chevron', [id]),
     pool.query('SELECT award, count, created_at FROM awards WHERE user_id=$1 ORDER BY created_at DESC LIMIT 30', [id]),
     pool.query('SELECT count(*)::int AS n FROM sectors WHERE user_id=$1 AND control >= 100', [id]),
+    pool.query('SELECT cls, name, color FROM drone_models WHERE user_id=$1 ORDER BY cls', [id]),
   ]);
   const x = p.rows[0];
   const st = x.stats ?? {};
@@ -154,6 +155,9 @@ api.get('/players/:id', requireAuth, async (req: AuthedRequest, res) => {
       buildsDone: st.buildsDone ?? 0,
       controlled: sec.rows[0].n,
     },
+    achPoints: st.achPoints ?? 0,
+    models: md.rows,
+    mascots: Object.keys(st).filter((k) => k.startsWith('mascot_') && st[k]).map((k) => k.slice(7)),
   });
 });
 

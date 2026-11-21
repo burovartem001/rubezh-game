@@ -77,6 +77,16 @@ const P: Record<string, React.ReactNode> = {
   wrench: (<><path d="M14.5 6.5a4 4 0 0 0-5.3 5.3L3.5 17.5l3 3 5.7-5.7a4 4 0 0 0 5.3-5.3l-2.6 2.6-2.6-.4-.4-2.6z" /></>),
   sparkle: (<><path d="M12 3l1.8 6.2L20 11l-6.2 1.8L12 19l-1.8-6.2L4 11l6.2-1.8z" /></>),
   compass: (<><circle cx="12" cy="12" r="9" /><path d="M15.5 8.5l-2 5-5 2 2-5z" /></>),
+  motorpool: (<><path d="M3 20V9l9-5 9 5v11" /><path d="M6 20v-7h12v7M6 16h12" /><circle cx="9" cy="18.5" r="1" /><circle cx="15" cy="18.5" r="1" /></>),
+  repairyard: (<><path d="M3 20h18" /><path d="M5 20v-6h6v6M13 20V8h6v12" /><path d="M7 11l2-3M16 5v3" /><circle cx="16" cy="12" r="1.5" /></>),
+  medbay: (<><rect x="3" y="7" width="18" height="13" rx="2" /><path d="M12 10v7M8.5 13.5h7M9 7V4h6v3" /></>),
+  analytics: (<><path d="M4 20V4M4 20h16" /><path d="M7 16l4-5 3 3 5-7" /><circle cx="19" cy="7" r="1.3" /></>),
+  testrange: (<><path d="M3 20h18M6 20l3-9h6l3 9" /><path d="M12 11V7" /><path d="M7 5h10M9 5l-2-2M15 5l2-2" /></>),
+  blueprint: (<><rect x="3" y="4" width="18" height="16" rx="1.5" /><path d="M7 8h4v4H7zM14 8h3M14 11h3M7 16h10" /></>),
+  outpost: (<><path d="M4 21l8-16 8 16" /><path d="M8 13h8M12 5V2l4 1.5L12 5" /></>),
+  trophy: (<><path d="M8 4h8v5a4 4 0 0 1-8 0z" /><path d="M8 6H4c0 3 2 4 4 4M16 6h4c0 3-2 4-4 4M12 13v4M8 21h8M9 17h6v4" /></>),
+  book: (<><path d="M4 5c2-1 5-1 8 1 3-2 6-2 8-1v14c-2-1-5-1-8 1-3-2-6-2-8-1z" /><path d="M12 6v14" /></>),
+  paw: (<><circle cx="7" cy="10" r="1.8" /><circle cx="11" cy="7" r="1.8" /><circle cx="15" cy="7.5" r="1.8" /><circle cx="18" cy="11" r="1.8" /><path d="M8 17c0-3 2-5 4.5-5s4.5 2 4.5 4.5c0 2-1.5 3-3 2.5-1-.3-2-.3-3 0-1.5.5-3-.5-3-2z" /></>),
   radio: (<><path d="M5 12a7 7 0 0 1 14 0M8 12a4 4 0 0 1 8 0" /><circle cx="12" cy="12" r="1.5" /><path d="M12 13.5V21" /></>),
 };
 

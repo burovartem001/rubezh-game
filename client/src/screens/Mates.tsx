@@ -1,3 +1,5 @@
+import { MASCOTS, achTitle } from '../../../shared/content';
+import { OPERATORS } from '../../../shared/config';
 import React, { useEffect, useState } from 'react';
 import { AWARDS, TUTORIAL } from '../../../shared/config';
 import {
@@ -251,6 +253,23 @@ export function ProfileSheet({ id, onClose }: { id: number; onClose: () => void 
             <div className="stat-tile"><Icon name="compass" size={20} /><b>{p.stats.controlled}</b><span>секторов</span></div>
             <div className="stat-tile"><Icon name="medal" size={20} /><b>{p.chevrons.length}</b><span>шевронов</span></div>
           </div>
+          {(p.achPoints ?? 0) > 0 && (
+            <p className="small">
+              <Icon name="trophy" size={15} /> Звание по достижениям: <b>{achTitle(p.achPoints ?? 0)}</b> · {p.achPoints} очков
+            </p>
+          )}
+          {!!p.models?.length && (
+            <p className="small">
+              <Icon name="drone" size={15} /> Модели дронов: {p.models.map((m) => (
+                <span key={m.cls} className="pill small" style={{ borderColor: m.color }}>«{m.name}» · {OPERATORS[m.cls].name.toLowerCase()}</span>
+              ))}
+            </p>
+          )}
+          {!!p.mascots?.length && (
+            <p className="small">
+              <Icon name="paw" size={15} /> Талисманы: {p.mascots.map((k) => MASCOTS[k]?.name).filter(Boolean).join(', ')}
+            </p>
+          )}
           <h3>
             <Icon name="medal" size={18} /> Коллекция шевронов · {p.chevrons.length}/{CHEVRONS.length}
           </h3>

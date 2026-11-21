@@ -14,6 +14,8 @@ import { MapArt } from '../art/MapArt';
 import { Portrait, Speech, VehicleArt } from '../art/art';
 import { MapEventBanner, PvpTab, bonusFor } from './Long';
 import { ProfileSheet } from './Mates';
+import { OutpostSectorBlock, OutpostsPanel } from './Deep';
+import { CAMPAIGN, CampaignStep } from '../../../shared/content';
 import { CONTROL_GRACE, mapEventAt, seasonTheme } from '../../../shared/progression';
 import { EquipKind, equipmentPower } from '../../../shared/config';
 
@@ -23,10 +25,15 @@ const DIFF_NAMES = ['', 'спокойно', 'терпимо', 'горячо', '�
 export function MapScreen() {
   const { state, nav, now } = useGame();
   const [sel, setSel] = useState<number | null>(null);
+  const [camp, setCamp] = useState<CampaignStep | null>(null);
   const [zoom, setZoom] = useState(1);
   useEffect(() => {
     if (nav.tab === 'map' && nav.focus?.startsWith('sector-')) setSel(Number(nav.focus.slice(7)));
-  }, [nav]);
+    if (nav.tab === 'map' && nav.focus?.startsWith('campaign-')) {
+      const st = CAMPAIGN.find((x) => x.key === nav.focus!.slice(9));
+      if (st && st.kind === 'mission' && CAMPAIGN[state.campaign.step]?.key === st.key) setCamp(st);
+    }
+  }, [nav]); // eslint-disable-line react-hooks/exhaustive-deps
   const ss = (id: number) => state.sectors.find((s) => s.id === id)!;
   const opened = SECTORS.filter((s) => ss(s.id).unlocked);
   const controlled = state.sectors.filter((s) => s.control >= 100).length;
@@ -124,7 +131,9 @@ export function MapScreen() {
           );
         })}
       </section>
+      <OutpostsPanel />
       {sel != null && <SectorSheet id={sel} onClose={() => setSel(null)} />}
+      {camp && <GroupBuilder sector={sectorById(camp.sectorId!)!} mission={camp.mission!} campaign={camp} onBack={() => setCamp(null)} onClose={() => setCamp(null)} />}
     </>
   );
 }
@@ -198,6 +207,7 @@ function SectorSheet({ id, onClose }: { id: number; onClose: () => void }) {
               <Icon name="sparkle" size={14} /> Каждый процент разведки — плюс к силе группы (до +15%) и точнее прогноз.
             </p>
           )}
+          <OutpostSectorBlock sectorId={s.id} />
           <h3>Что можно сделать</h3>
           {SECTOR_MISSIONS[s.type].map((m) => {
             const def = MISSIONS[m];
@@ -262,20 +272,22 @@ function OutcomeMeter({ low, high }: { low: string; high: string }) {
   );
 }
 
-function GroupBuilder({ sector, mission, onBack, onClose }: { sector: SectorDef; mission: MissionType; onBack: () => void; onClose: () => void }) {
+function GroupBuilder({ sector: baseSector, mission, onBack, onClose, campaign }: { sector: SectorDef; mission: MissionType; onBack: () => void; onClose: () => void; campaign?: CampaignStep }) {
   const { state, act, go, now } = useGame();
+  const sector = campaign?.difficulty ? { ...baseSector, difficulty: campaign.difficulty } : baseSector;
+  const typeOk = (t: OperatorType) => !campaign?.onlyTypes || campaign.onlyTypes.includes(t);
   const affordable = useAffordable();
   const st = state.sectors.find((x) => x.id === sector.id)!;
-  const readyVehicles = VEHICLE_TYPES.filter((v) => state.vehicles[v]?.status === 'ready');
+  const readyVehicles = VEHICLE_TYPES.filter((v) => state.vehicles[v]?.status === 'ready' && (!campaign?.vehicles || campaign.vehicles.includes(v)));
   const preferred: VehicleType | undefined = mission === 'recon' && readyVehicles.includes('ebike') ? 'ebike' : readyVehicles[0];
   const [vehicle, setVehicle] = useState<VehicleType | undefined>(preferred);
-  const avail = Object.fromEntries(OPERATOR_TYPES.map((t) => [t, state.operators[t].available])) as Record<OperatorType, number>;
+  const avail = Object.fromEntries(OPERATOR_TYPES.map((t) => [t, typeOk(t) ? state.operators[t].available : 0])) as Record<OperatorType, number>;
   const ranks = Object.fromEntries(OPERATOR_TYPES.map((t) => [t, state.operators[t].rank])) as Record<OperatorType, number>;
   const vLevel = vehicle ? state.vehicles[vehicle]!.level : 1;
   const capFor = (v?: VehicleType) =>
     planExpedition({ sector, mission, group: {}, ranks, vehicle: { type: v ?? 'moto', level: v ? state.vehicles[v]!.level : 1 }, equipment: [], skills: state.commander.skills, commsLevel: state.buildings.comms, sectorRecon: st.recon }).capacity;
   const [group, setGroup] = useState<Group>(() => autoGroup(mission, avail, capFor(preferred)));
-  const readyEq = state.equipment.filter((e) => e.status === 'ready');
+  const readyEq = state.equipment.filter((e) => e.status === 'ready' && (e.durability ?? 100) > 0);
   const [eqIds, setEqIds] = useState<number[]>(() => {
     const pick: number[] = [];
     const want: EquipKind[] = mission === 'recon' ? ['recon', 'field', 'losses'] : ['fpv', 'power', 'losses', 'field', 'recon'];
@@ -288,7 +300,7 @@ function GroupBuilder({ sector, mission, onBack, onClose }: { sector: SectorDef;
   });
   const equipment = readyEq.filter((e) => eqIds.includes(e.id));
   const plan = vehicle
-    ? planExpedition({ sector, mission, group, ranks, vehicle: { type: vehicle, level: vLevel }, equipment, skills: state.commander.skills, commsLevel: state.buildings.comms, sectorRecon: st.recon, bonus: bonusFor(state, sector.id, now, group) })
+    ? planExpedition({ sector, mission, group, ranks, vehicle: { type: vehicle, level: vLevel }, equipment, skills: state.commander.skills, commsLevel: state.buildings.comms, sectorRecon: st.recon, bonus: bonusFor(state, sector.id, now, group, !!campaign?.night) })
     : null;
   const size = groupSize(group);
   const slotsFree = state.expeditions.length < state.slots;
@@ -299,6 +311,10 @@ function GroupBuilder({ sector, mission, onBack, onClose }: { sector: SectorDef;
   else if (size < 1) why = 'Добавьте хотя бы одного оператора';
   else if (plan && size > plan.capacity) why = `В транспорт помещается ${plan.capacity}`;
   else if (plan && !affordable(plan.cost)) why = 'Не хватает ресурсов на поход';
+  else if (campaign?.minSize && size < campaign.minSize) why = `В этом задании нужно не меньше ${campaign.minSize} операторов`;
+  else if (campaign?.needModel && !state.models.some((m) => (group[m.cls] ?? 0) > 0 && m.durability > 0)) why = 'Нужна исправная модель дрона хотя бы для одного класса в группе';
+  else if (campaign && !st.unlocked) why = `Сектор ещё в тумане: ${st.lockReason}`;
+  else if (campaign && st.recon < MISSIONS[mission].minRecon) why = `Нужна разведанность ${MISSIONS[mission].minRecon}% — сейчас ${st.recon}%`;
 
   const toggleEq = (id: number) => {
     const e = readyEq.find((x) => x.id === id)!;
@@ -310,10 +326,21 @@ function GroupBuilder({ sector, mission, onBack, onClose }: { sector: SectorDef;
   };
 
   return (
-    <Sheet title={`${MISSIONS[mission].name}: ${sector.name}`} onClose={onClose} wide>
-      <button className="link" onClick={onBack}>
-        <Icon name="back" size={16} /> к сектору
-      </button>
+    <Sheet title={campaign ? `Кампания: ${campaign.title}` : `${MISSIONS[mission].name}: ${sector.name}`} onClose={onClose} wide>
+      {!campaign && (
+        <button className="link" onClick={onBack}>
+          <Icon name="back" size={16} /> к сектору
+        </button>
+      )}
+      {campaign && (
+        <div className="warn-box small">
+          <Icon name="book" size={14} /> Задание кампании: {MISSIONS[mission].name.toLowerCase()} в «{sector.name}», сложность {sector.difficulty}.
+          {campaign.onlyTypes && ` Только ${campaign.onlyTypes.map((t) => OPERATORS[t].name.toLowerCase()).join(', ')}.`}
+          {campaign.minSize && ` От ${campaign.minSize} операторов.`}
+          {campaign.needModel && ' Нужна модель дрона.'}
+          {campaign.night && ' Ночью: сила +8%, разведка −10%.'}
+        </div>
+      )}
       <div className="brief">
         <Icon name={MISSION_ICON[mission]} size={30} />
         <p>
@@ -332,7 +359,7 @@ function GroupBuilder({ sector, mission, onBack, onClose }: { sector: SectorDef;
       <div className="pick-list">
         {OPERATOR_TYPES.map((t) => {
           const o = state.operators[t];
-          if (!o.available && !o.on_mission && !o.wounded) return null;
+          if ((!o.available && !o.on_mission && !o.wounded) || !typeOk(t)) return null;
           return (
             <div key={t} className={`pick-card ${(group[t] ?? 0) > 0 ? 'on' : ''}`}>
               <Portrait sprite={OPERATORS[t].sprite} size={52} />
@@ -360,7 +387,7 @@ function GroupBuilder({ sector, mission, onBack, onClose }: { sector: SectorDef;
         {VEHICLE_TYPES.map((v) => {
           const row = state.vehicles[v];
           if (!row) return null;
-          const ok = row.status === 'ready';
+          const ok = row.status === 'ready' && (!campaign?.vehicles || campaign.vehicles.includes(v));
           return (
             <button key={v} className={`veh-card ${vehicle === v ? 'on' : ''}`} disabled={!ok} onClick={() => setVehicle(v)}>
               <VehicleArt type={v} w={124} className="veh-img" />
@@ -383,6 +410,7 @@ function GroupBuilder({ sector, mission, onBack, onClose }: { sector: SectorDef;
                 <b>{EQUIPMENT[e.type].name}</b>
                 <small>
                   {RARITY_NAMES[e.rarity]} {e.level} ур. · {equipmentEffectText(e.type, e.rarity, e.level)}
+                  {(e.durability ?? 100) < 50 && ` · износ, эффект ${Math.round(((e.durability ?? 100) / 50) * 100)}%`}
                 </small>
               </span>
               {eqIds.includes(e.id) && <Icon name="check" size={18} className="tick" />}
@@ -454,7 +482,7 @@ function GroupBuilder({ sector, mission, onBack, onClose }: { sector: SectorDef;
           , а ещё его можно отбить заданием «Снабжение».
         </Speech>
       )}
-      <Button disabled={!!why} why={why} onClick={async () => { if (await act('dispatch', { sectorId: sector.id, mission, group, vehicle, equipment: eqIds })) onClose(); }}>
+      <Button disabled={!!why} why={why} onClick={async () => { if (await act('dispatch', { sectorId: sector.id, mission, group, vehicle, equipment: eqIds, ...(campaign ? { campaign: campaign.key } : {}) })) onClose(); }}>
         <Icon name="flag" size={18} /> Отправить группу
       </Button>
     </Sheet>

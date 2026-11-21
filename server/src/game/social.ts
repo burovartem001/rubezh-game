@@ -225,7 +225,7 @@ export const SOCIAL_ACTIONS: Record<string, Handler> = {
     if (ids.length > MAX_EQUIPMENT_PER_GROUP) throw new GameError('Не больше двух предметов оснащения');
     const eq = ids.map((eid) => {
       const e = ps.equipment.find((x) => x.id === eid);
-      if (!e || e.status !== 'ready') throw new GameError('Оснащение недоступно');
+      if (!e || e.status !== 'ready' || (e.durability ?? 100) <= 0) throw new GameError('Оснащение недоступно или сломано');
       return e;
     });
     if (new Set(eq.map((e) => EQUIPMENT[e.type].kind)).size !== eq.length) throw new GameError('Нельзя взять два предмета с одинаковым эффектом');
@@ -238,9 +238,9 @@ export const SOCIAL_ACTIONS: Record<string, Handler> = {
     const ranks = Object.fromEntries(OPERATOR_TYPES.map((x) => [x, ps.ops[x].rank])) as Record<OperatorType, number>;
     const input = {
       sector, mission: 'pvp' as const, group, ranks, vehicle: { type: vType, level: v.level },
-      equipment: eq.map((e) => ({ id: e.id, type: e.type as EquipmentType, rarity: e.rarity as Rarity, level: e.level })),
+      equipment: eq.map((e) => ({ id: e.id, type: e.type as EquipmentType, rarity: e.rarity as Rarity, level: e.level, durability: e.durability })),
       skills: ps.p.skills, commsLevel: ps.buildings.comms, sectorRecon: 0,
-      bonus: dispatchBonus(ps, 0, now, chosen.map((x) => ({ type: x.type, level: x.level, trait: x.trait }))),
+      bonus: dispatchBonus(ps, 0, now, chosen, group),
       override: { enemy: t.defense, rewards: t.loot },
     };
     const plan = planExpedition(input);

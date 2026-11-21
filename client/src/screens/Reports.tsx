@@ -8,6 +8,8 @@ import { CostLine, RewardLine, Sheet, ago, pad2 } from '../ui';
 import { Icon, MISSION_ICON } from '../art/icons';
 import { Portrait, Speech, Stamp } from '../art/art';
 import { DefenseReportBody, SoldierNews } from './Long';
+import { EncounterBlock } from './Deep';
+import { ENCOUNTERS } from '../../../shared/content';
 
 const tone = (o: Report['outcome']) => (o === 'fail' ? 'bad' : o === 'partial' ? 'mid' : 'ok');
 
@@ -41,7 +43,24 @@ export function ReportsScreen() {
       {!list.length && <Speech who={EMPTY.reports.who}>{EMPTY.reports.text}</Speech>}
       <div className="reports">
         {list.map((r) =>
-          r.kind === 'defense' || r.kind === 'pvp_defense' ? (
+          r.kind === 'outpost' ? (
+            <button key={r.id} className={`report-card o-${r.won ? 'success' : 'fail'} ${r.read ? '' : 'unread'}`} onClick={() => setOpen(r)}>
+              <span className="rc-icon">
+                <Icon name="outpost" size={24} />
+              </span>
+              <span className="rc-body">
+                <span className="between">
+                  <b>Пункт у «{r.sectorName}»</b>
+                  <span className="muted tiny">{ago(r.createdAt, now)}</span>
+                </span>
+                <span className="rc-line">
+                  <span className={`rc-outcome t-${r.won ? 'ok' : 'bad'}`}>{r.won ? 'ОТБИТО' : (r.after ?? 0) <= 0 ? 'ПОТЕРЯН' : 'ПОВРЕЖДЁН'}</span>
+                  {r.won && <RewardLine cost={r.reward ?? {}} />}
+                </span>
+              </span>
+              {!r.read && <i className="unread-dot" aria-label="новый" />}
+            </button>
+          ) : r.kind === 'defense' || r.kind === 'pvp_defense' ? (
             <button key={r.id} className={`report-card o-${r.won ? 'success' : 'fail'} ${r.read ? '' : 'unread'}`} onClick={() => setOpen(r)}>
               <span className="rc-icon">
                 <Icon name={r.kind === 'defense' ? 'reb' : 'flag'} size={24} />
@@ -74,13 +93,15 @@ export function ReportsScreen() {
                 <span className={`rc-outcome t-${tone(r.outcome)}`}>{OUTCOME_LORE[r.outcome].stamp}</span>
                 <RewardLine cost={r.rewards} />
               </span>
-              {(r.totalWounded > 0 || r.totalLost > 0 || r.vehicleDamaged || r.levelUp || r.drop) && (
+              {(r.totalWounded > 0 || r.totalLost > 0 || r.vehicleDamaged || r.levelUp || r.drop || r.campaign || (r.encounter && !r.encounter.resolved)) && (
                 <span className="rc-tags tiny">
                   {r.totalWounded > 0 && <span className="t-warn"><Icon name="cross" size={12} /> {r.totalWounded}</span>}
                   {r.totalLost > 0 && <span className="t-bad"><Icon name="skull" size={12} /> {r.totalLost}</span>}
                   {r.vehicleDamaged && <span className="t-warn"><Icon name="wrench" size={12} /> ремонт</span>}
                   {r.levelUp && <span className="t-gold"><Icon name="star" size={12} /> уровень {r.levelUp}</span>}
                   {r.drop && <span className="t-gold"><Icon name="gift" size={12} /> трофей</span>}
+                  {r.encounter && !r.encounter.resolved && <span className="t-gold"><Icon name="sparkle" size={12} /> встреча</span>}
+                  {r.campaign && <span className="t-gold"><Icon name="book" size={12} /> сюжет</span>}
                 </span>
               )}
             </span>
@@ -100,6 +121,22 @@ export function ReportsScreen() {
 }
 
 export function ReportSheet({ r, onClose }: { r: Report; onClose: () => void }) {
+  if (r.kind === 'outpost')
+    return (
+      <Sheet title="Передовой пункт" onClose={onClose}>
+        <div className={`report-hero ${r.won ? 'o-success' : 'o-fail'}`}>
+          <div>
+            <span className="kicker">Пункт у «{r.sectorName}»</span>
+            <h2>{r.won ? 'Отбили!' : (r.after ?? 0) <= 0 ? 'Пункт потерян' : 'Пункт повреждён'}</h2>
+            <p className="small">Сила нападения {r.attack} против обороны пункта {r.defense}.</p>
+          </div>
+          <div className={`stamp ${r.won ? 'ok' : 'bad'}`}>{r.won ? 'ОТБИТО' : 'ПРОРЫВ'}</div>
+        </div>
+        <Speech who="batya">
+          {r.won ? <>Пункт стоит. С трофеев: <RewardLine cost={r.reward ?? {}} /></> : (r.after ?? 0) <= 0 ? 'Пункт сровняли с землёй, контроль сектора просел. Отстроим, когда вернём сектор.' : `Пункт потрепали: уровень ${r.before} → ${r.after}, контроль сектора просел. Укрепляйте оборону полигона — от неё зависит и пункт.`}
+        </Speech>
+      </Sheet>
+    );
   if (r.kind === 'defense' || r.kind === 'pvp_defense')
     return (
       <Sheet title={r.kind === 'defense' ? 'Атака на полигон' : 'Набег на полигон'} onClose={onClose}>
@@ -154,6 +191,22 @@ function ExpeditionReport({ r, onClose }: { r: Report; onClose: () => void }) {
       </div>
 
       <SoldierNews s={r.soldiers} />
+      {r.campaign && (
+        <div className="drop-banner">
+          <Icon name="book" size={20} /> Кампания: «{r.campaign.title}» выполнено
+        </div>
+      )}
+      {r.blueprint && (
+        <div className="drop-banner">
+          <Icon name="blueprint" size={20} /> Новый чертёж: «{r.blueprint}»
+        </div>
+      )}
+      {!!r.broken?.length && (
+        <p className="small red">
+          <Icon name="wrench" size={14} /> Износилось до поломки: {r.broken.join(', ')} — нужен ремонт.
+        </p>
+      )}
+      {r.encounter && ENCOUNTERS.some((e) => e.key === r.encounter!.key) && <EncounterBlock r={r} />}
       {(r.companyDamage ?? 0) > 0 && (
         <p className="small amber">
           <Icon name="stronghold" size={14} /> Урон по укрепрайону роты: {r.companyDamage}

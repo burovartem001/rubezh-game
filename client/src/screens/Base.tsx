@@ -9,6 +9,7 @@ import { ExpeditionRow, JobRow } from '../components/Queues';
 import { Icon } from '../art/icons';
 import { BUILDING_SPOTS, BuildingArt, Drone, Ring, Speech } from '../art/art';
 import { HqPanels, ResearchSheet } from './Long';
+import { CampaignCard, ConstructorSheet, EventCard, MascotsRow } from './Deep';
 
 const LINKS: Partial<Record<BuildingKey, { tab: 'squad' | 'map'; focus?: string; text: string; icon: string }>> = {
   training: { tab: 'squad', focus: 'operators', text: 'К подготовке операторов', icon: 'squad' },
@@ -16,6 +17,10 @@ const LINKS: Partial<Record<BuildingKey, { tab: 'squad' | 'map'; focus?: string;
   supply: { tab: 'squad', focus: 'operators', text: 'К восстановлению раненых', icon: 'cross' },
   fueldepot: { tab: 'squad', focus: 'vehicles', text: 'В автопарк', icon: 'bukhanka' },
   comms: { tab: 'map', text: 'Открыть карту секторов', icon: 'map' },
+  motorpool: { tab: 'squad', focus: 'vehicles', text: 'К технике', icon: 'bukhanka' },
+  repairyard: { tab: 'squad', focus: 'equipment', text: 'К ремонту оснащения и моделей', icon: 'wrench' },
+  medbay: { tab: 'squad', focus: 'operators', text: 'К бойцам', icon: 'cross' },
+  analytics: { tab: 'squad', focus: 'equipment', text: 'К чертежам', icon: 'blueprint' },
 };
 const RESEARCH_LINK: Partial<Record<BuildingKey, boolean>> = { comms: true };
 const DAILY_ICON: Record<DailyKey, string> = { dispatch: 'map', train: 'training', build: 'hq', recon: 'recon' };
@@ -48,7 +53,7 @@ export function BaseScreen() {
               const job = state.jobs.find((j) => j.kind === 'build' && j.payload.building === k);
               const f = job ? Math.max(0, Math.min(1, (now - job.startAt) / (job.endAt - job.startAt))) : 0;
               return (
-                <button key={k} className={`hotspot ${job ? 'busy' : ''}`} style={{ left: `${s.x * 100}%`, top: `${s.y * 100}%` }} onClick={() => setOpen(k)} data-focus={nav.focus === k}>
+                <button key={k} className={`hotspot ${job ? 'busy' : ''} ${state.buildings[k] === 0 && !job ? 'unbuilt' : ''}`} style={{ left: `${s.x * 100}%`, top: `${s.y * 100}%` }} onClick={() => setOpen(k)} data-focus={nav.focus === k}>
                   {job ? (
                     <Ring value={f} size={40}>
                       <Icon name="wrench" size={16} />
@@ -59,7 +64,7 @@ export function BaseScreen() {
                     </span>
                   )}
                   <span className="hs-label">
-                    {BUILDINGS[k].name} <b>{state.buildings[k]}</b>
+                    {BUILDINGS[k].name} <b>{state.buildings[k] || '—'}</b>
                   </span>
                 </button>
               );
@@ -78,6 +83,11 @@ export function BaseScreen() {
       </section>
 
       <Speech who={tip.who}>{tip.text}</Speech>
+      <MascotsRow />
+      <div className="grid2">
+        <CampaignCard />
+        <EventCard />
+      </div>
 
       <div className="section-head">
         <h2>
@@ -90,15 +100,15 @@ export function BaseScreen() {
           const job = state.jobs.find((j) => j.kind === 'build' && j.payload.building === k);
           const lvl = state.buildings[k];
           return (
-            <button key={k} className={`bld-card ${job ? 'busy' : ''}`} onClick={() => setOpen(k)} data-focus={nav.focus === k}>
+            <button key={k} className={`bld-card ${job ? 'busy' : ''} ${lvl === 0 && !job ? 'unbuilt' : ''}`} onClick={() => setOpen(k)} data-focus={nav.focus === k}>
               <BuildingArt k={k} aspect={1.6} className="bld-art">
-                <span className="lvl-badge">{lvl}</span>
+                <span className="lvl-badge">{lvl === 0 ? <Icon name={state.buildings.hq >= (BUILDINGS[k].unlockHq ?? 1) ? 'plus' : 'lock'} size={14} /> : lvl}</span>
                 {job && <span className="scaffold" aria-hidden />}
               </BuildingArt>
               <span className="bld-name">
                 <Icon name={k} size={16} /> {BUILDINGS[k].name}
               </span>
-              <span className="bld-tag">{job ? <>→ {job.payload.toLevel} ур. · <Countdown start={job.startAt} end={job.endAt} /></> : BUILDING_LORE[k].tagline}</span>
+              <span className="bld-tag">{job ? <>→ {job.payload.toLevel} ур. · <Countdown start={job.startAt} end={job.endAt} /></> : lvl === 0 ? (state.buildings.hq >= (BUILDINGS[k].unlockHq ?? 1) ? 'не построено — можно строить' : `с командного пункта ${BUILDINGS[k].unlockHq} ур.`) : BUILDING_LORE[k].tagline}</span>
               {job && <JobProgress start={job.startAt} end={job.endAt} />}
             </button>
           );
@@ -169,6 +179,18 @@ function Daily() {
   );
 }
 
+function CtorButton() {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <button className="btn secondary" onClick={() => setOpen(true)}>
+        <Icon name="drone" size={18} /> Конструктор дронов
+      </button>
+      {open && <ConstructorSheet onClose={() => setOpen(false)} />}
+    </>
+  );
+}
+
 function ResearchButton() {
   const [open, setOpen] = useState(false);
   return (
@@ -196,6 +218,7 @@ function BuildingSheet({ k, onClose }: { k: BuildingKey; onClose: () => void }) 
   let why = '';
   if (max) why = 'Это предел — здание полностью развито';
   else if (job) why = 'Улучшение уже идёт';
+  else if (state.buildings.hq < (d.unlockHq ?? 1)) why = `${d.name} — с командного пункта ${d.unlockHq} уровня`;
   else if (busy) why = 'Бригада занята другим зданием — строим по одному';
   else if (k !== 'hq' && lvl + 1 > state.buildings.hq) why = `Сначала нужен командный пункт ${lvl + 1} уровня`;
   else if (!affordable) why = 'Не хватает ресурсов';
@@ -205,7 +228,7 @@ function BuildingSheet({ k, onClose }: { k: BuildingKey; onClose: () => void }) 
       <BuildingArt k={k} aspect={2.2} className="sheet-art">
         <span className="art-caption">
           <span className="kicker">{lore.tagline}</span>
-          <b>Уровень {lvl}</b> из {MAX_BUILDING_LEVEL}
+          {lvl === 0 ? <b>Ещё не построено</b> : <><b>Уровень {lvl}</b> из {MAX_BUILDING_LEVEL}</>}
         </span>
       </BuildingArt>
       <div className="level-dots" aria-hidden>
@@ -220,7 +243,7 @@ function BuildingSheet({ k, onClose }: { k: BuildingKey; onClose: () => void }) 
       <div className="compare">
         <div className="cmp now">
           <span className="kicker">Сейчас</span>
-          <p>{buildingEffectText(k, lvl)}</p>
+          <p>{lvl === 0 ? 'Здания пока нет.' : buildingEffectText(k, lvl)}</p>
         </div>
         {!max && (
           <>
@@ -252,8 +275,9 @@ function BuildingSheet({ k, onClose }: { k: BuildingKey; onClose: () => void }) 
         </div>
       )}
       <Button disabled={!!why} why={why} onClick={async () => { if (await act('build', { building: k })) onClose(); }}>
-        <Icon name="up" size={18} /> {max ? 'Максимальный уровень' : `Улучшить до ${lvl + 1} уровня`}
+        <Icon name={lvl === 0 ? 'plus' : 'up'} size={18} /> {max ? 'Максимальный уровень' : lvl === 0 ? 'Построить' : `Улучшить до ${lvl + 1} уровня`}
       </Button>
+      {k === 'testrange' && lvl > 0 && <CtorButton />}
       {RESEARCH_LINK[k] && <ResearchButton />}
       {link && (
         <button className="btn secondary" onClick={() => { onClose(); go(link.tab, link.focus); }}>

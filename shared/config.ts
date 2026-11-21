@@ -19,8 +19,10 @@ export const START_RESOURCES: Record<ResKey, number> = { supplies: 420, parts: 2
 
 /* ───────────────────────────── Здания ───────────────────────────── */
 
-export type BuildingKey = 'hq' | 'training' | 'workshop' | 'supply' | 'fueldepot' | 'comms' | 'defense';
-export const BUILDING_KEYS: BuildingKey[] = ['hq', 'training', 'workshop', 'supply', 'fueldepot', 'comms', 'defense'];
+export type BuildingKey = 'hq' | 'training' | 'workshop' | 'supply' | 'fueldepot' | 'comms' | 'defense' | 'motorpool' | 'repairyard' | 'medbay' | 'analytics' | 'testrange';
+export const BUILDING_KEYS: BuildingKey[] = ['hq', 'training', 'workshop', 'supply', 'fueldepot', 'comms', 'defense', 'motorpool', 'repairyard', 'medbay', 'analytics', 'testrange'];
+/** Здания, которые нужно сначала построить (стартуют с уровня 0). */
+export const LATE_BUILDINGS: BuildingKey[] = ['motorpool', 'repairyard', 'medbay', 'analytics', 'testrange'];
 export const MAX_BUILDING_LEVEL = 10;
 
 export interface BuildingDef {
@@ -30,6 +32,7 @@ export interface BuildingDef {
   costGrowth: number;
   baseTime: number; // секунды на улучшение 1 → 2
   timeGrowth: number;
+  unlockHq?: number; // для построек с нуля: нужный уровень командного пункта
 }
 
 export const BUILDINGS: Record<BuildingKey, BuildingDef> = {
@@ -81,6 +84,51 @@ export const BUILDINGS: Record<BuildingKey, BuildingDef> = {
     baseTime: 25,
     timeGrowth: 1.75,
   },
+  motorpool: {
+    name: 'Автопарк',
+    purpose: 'Боксы и яма для техники. Улучшение транспорта дешевле; на 3 уровне открывает пикап.',
+    baseCost: { supplies: 150, parts: 200, fuel: 50 },
+    costGrowth: 1.5,
+    baseTime: 60,
+    timeGrowth: 1.7,
+    unlockHq: 3,
+  },
+  repairyard: {
+    name: 'Ремонтная зона',
+    purpose: 'Ремонт техники, оснащения и моделей дронов дешевле, износ в походах меньше.',
+    baseCost: { supplies: 150, parts: 220 },
+    costGrowth: 1.5,
+    baseTime: 60,
+    timeGrowth: 1.7,
+    unlockHq: 3,
+  },
+  medbay: {
+    name: 'Медпункт',
+    purpose: 'Раненые встают быстрее и дешевле, сводит шрамы бойцам.',
+    baseCost: { supplies: 250, parts: 150 },
+    costGrowth: 1.5,
+    baseTime: 60,
+    timeGrowth: 1.7,
+    unlockHq: 4,
+  },
+  analytics: {
+    name: 'Аналитический центр',
+    purpose: 'Точнее прогноз, больше данных; расшифровывает трофейные данные в чертежи деталей.',
+    baseCost: { supplies: 200, parts: 250, data: 40 },
+    costGrowth: 1.5,
+    baseTime: 90,
+    timeGrowth: 1.7,
+    unlockHq: 5,
+  },
+  testrange: {
+    name: 'Полигон испытаний',
+    purpose: 'Здесь собирают и обкатывают свои модели дронов. Каждый уровень усиливает модели.',
+    baseCost: { supplies: 180, parts: 260, data: 20 },
+    costGrowth: 1.5,
+    baseTime: 75,
+    timeGrowth: 1.7,
+    unlockHq: 4,
+  },
   defense: {
     name: 'Оборона полигона',
     purpose: 'Посты наблюдения, РЭБ-купол и дежурные расчёты. Отбивает атаки противника на полигон и набеги других командиров.',
@@ -94,14 +142,14 @@ export const BUILDINGS: Record<BuildingKey, BuildingDef> = {
 /** Цена улучшения с уровня `level` на `level + 1`. */
 export function buildingUpgradeCost(key: BuildingKey, level: number): Cost {
   const d = BUILDINGS[key];
-  const k = Math.pow(d.costGrowth, level - 1);
+  const k = level <= 0 ? 0.8 : Math.pow(d.costGrowth, level - 1);
   const out: Cost = {};
   for (const r of RES_KEYS) if (d.baseCost[r]) out[r] = Math.round(d.baseCost[r]! * k);
   return out;
 }
 export function buildingUpgradeTime(key: BuildingKey, level: number): number {
   const d = BUILDINGS[key];
-  return Math.round(d.baseTime * Math.pow(d.timeGrowth, level - 1));
+  return Math.round(level <= 0 ? d.baseTime * 0.6 : d.baseTime * Math.pow(d.timeGrowth, level - 1));
 }
 
 /* Производство и хранение */
@@ -140,6 +188,16 @@ export function buildingEffectText(key: BuildingKey, level: number): string {
       return `Разведка и данные +${Math.round((level - 1) * COMMS_RECON_PER_LEVEL * 100)}%. Доступны секторы до уровня связи ${level}. Исследования ${Math.min(4, Math.floor((level + 1) / 2))} ступени.`;
     case 'defense':
       return `Базовая оборона ${8 + level * 10}. Плюс дежурные операторы на базе.`;
+    case 'motorpool':
+      return level ? `Улучшение транспорта дешевле на ${Math.min(50, 5 * level)}%.${level >= 3 ? ' Пикап доступен.' : ' Пикап — с 3 уровня.'}` : 'Не построен. Улучшение транспорта дешевле, на 3 уровне — пикап.';
+    case 'repairyard':
+      return level ? `Ремонт дешевле на ${Math.min(50, 8 * level)}%, износ в походах меньше на ${Math.min(40, 5 * level)}%.` : 'Не построена. Ремонт дешевле, износ меньше.';
+    case 'medbay':
+      return level ? `Восстановление раненых дешевле и быстрее на ${6 * level}%. Сводит шрамы бойцам.` : 'Не построен. Быстрее восстановление, лечение шрамов.';
+    case 'analytics':
+      return level ? `Прогноз точнее на ${6 * level}%, данные +${3 * level}%. Расшифровка чертежей.` : 'Не построен. Точнее прогноз, больше данных, чертежи.';
+    case 'testrange':
+      return level ? `Модели дронов сильнее на ${4 * level}%.` : 'Не построен. Нужен, чтобы собирать свои модели дронов.';
   }
 }
 
@@ -304,9 +362,9 @@ export function recoveryTime(total: number, logisticsRank: number): number {
 
 /* ───────────────────────────── Транспорт ───────────────────────────── */
 
-export type VehicleType = 'moto' | 'ebike' | 'bukhanka' | 'gyro' | 'niva';
-export const VEHICLE_TYPES: VehicleType[] = ['moto', 'ebike', 'bukhanka', 'gyro', 'niva'];
-export const STANDARD_VEHICLES: VehicleType[] = ['moto', 'ebike', 'bukhanka'];
+export type VehicleType = 'moto' | 'ebike' | 'bukhanka' | 'pickup' | 'gyro' | 'niva';
+export const VEHICLE_TYPES: VehicleType[] = ['moto', 'ebike', 'bukhanka', 'pickup', 'gyro', 'niva'];
+export const STANDARD_VEHICLES: VehicleType[] = ['moto', 'ebike', 'bukhanka', 'pickup'];
 export const MAX_VEHICLE_LEVEL = 5;
 
 export interface VehicleDef {
@@ -348,6 +406,15 @@ export const VEHICLES: Record<VehicleType, VehicleDef> = {
     fuelMul: 1.5,
     sprite: 2,
   },
+  pickup: {
+    name: 'Пикап',
+    purpose: 'Экспедиции и вывоз наград: больше добычи, +1 место в группе. Нужен автопарк 3 уровня',
+    unlockHq: 4,
+    acquireCost: { supplies: 250, parts: 400, fuel: 100 },
+    acquireTime: 120,
+    fuelMul: 1.25,
+    sprite: 3,
+  },
   gyro: {
     name: 'Гироскутер',
     purpose: 'Наградной: бесшумный, почти не ест топливо, в разведке лучше электровелосипеда',
@@ -386,6 +453,8 @@ export function vehicleBonus(type: VehicleType, level: number): VehicleBonus {
       return { timeMul: 1, fuelMul: 1 - (0.5 + 0.05 * l), capacity: 0, lootBonus: 0, reconBonus: 0.1 + 0.02 * l };
     case 'bukhanka':
       return { timeMul: 1.1, fuelMul: 1.5, capacity: 2 + (level >= 3 ? 1 : 0) + (level >= 5 ? 1 : 0), lootBonus: 0.1 + 0.04 * l, reconBonus: 0 };
+    case 'pickup':
+      return { timeMul: 1.05, fuelMul: 1.25, capacity: 1 + (level >= 4 ? 1 : 0), lootBonus: 0.25 + 0.05 * l, reconBonus: 0 };
     case 'gyro':
       return { timeMul: 0.9, fuelMul: 1 - (0.6 + 0.05 * l), capacity: 0, lootBonus: 0, reconBonus: 0.14 + 0.02 * l };
     case 'niva':
@@ -466,12 +535,15 @@ export function equipmentPower(type: EquipmentType, rarity: Rarity, level: numbe
   return Math.min(KIND_CAP[d.kind], base * (1 + 0.1 * (level - 1)));
 }
 /** Суммарный эффект заданного вида по набору предметов. */
-export function equipmentKindValue(items: { type: EquipmentType; rarity: Rarity; level: number }[], kind: EquipKind): number {
+export function equipmentKindValue(items: { type: EquipmentType; rarity: Rarity; level: number; durability?: number }[], kind: EquipKind): number {
   let v = 0;
   for (const e of items) {
     const d = EQUIPMENT[e.type];
-    if (d.kind === kind) v += equipmentPower(e.type, e.rarity, e.level);
-    if (d.extra?.kind === kind) v += d.extra.value * (1 + 0.1 * (e.level - 1));
+    // износ: до 50% прочности эффект полный, ниже — слабеет, на нуле — пропадает
+    const dur = e.durability ?? 100;
+    const wear = dur <= 0 ? 0 : dur >= 50 ? 1 : dur / 50;
+    if (d.kind === kind) v += equipmentPower(e.type, e.rarity, e.level) * wear;
+    if (d.extra?.kind === kind) v += d.extra.value * (1 + 0.1 * (e.level - 1)) * wear;
   }
   return Math.min(KIND_CAP[kind], v);
 }

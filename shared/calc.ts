@@ -55,6 +55,7 @@ export interface EquipLite {
   type: EquipmentType;
   rarity: Rarity;
   level: number;
+  durability?: number;
 }
 export interface PlanInput {
   sector: SectorDef;

@@ -64,6 +64,20 @@ import type { Db } from '../db.js';
 import { PRESTIGE_LEVEL, PRESTIGE_MAX, RESEARCH_COST, researchByKey, researchPrereq, streakReward, weekIndex, weeklyContracts } from '../../../shared/progression.js';
 import { addPoints, dispatchBonus, pickSoldiers, playerMods } from './meta.js';
 import { SOCIAL_ACTIONS } from './social.js';
+import { campaignMissionCheck, deepActions, workshopMul } from './deep.js';
+import { instructorMulOf, recoveryMulOf, repairMul, vehicleUpgradeMul } from '../../../shared/deepcalc.js';
+import { LATE_BUILDINGS } from '../../../shared/config.js';
+import { BUILDING_FX, CAMPAIGN, INSTRUCTOR_BONUS, MAX_INSTRUCTORS, SPEC_LEVEL, healScarsCost, repairDiscount, specByKey } from '../../../shared/content.js';
+import { SOLDIER_MAX_LEVEL } from '../../../shared/progression.js';
+
+function instructorMul(ps: PS): number {
+  return instructorMulOf(ps.soldiers);
+}
+function scaleCost(c: Record<string, number | undefined>, k: number) {
+  const o: Record<string, number> = {};
+  for (const [r, v] of Object.entries(c)) if (v) o[r] = Math.max(1, Math.round(v * k));
+  return o;
+}
 import { chevronByKey } from '../../../shared/chevrons.js';
 import {
   GameError,
@@ -114,6 +128,8 @@ export const ACTIONS: Record<string, Handler> = {
     if (ps.jobs.some((j) => j.queue === 'build')) throw new GameError('Строительная очередь занята — дождитесь завершения текущего улучшения');
     const level = ps.buildings[key];
     if (level >= MAX_BUILDING_LEVEL) throw new GameError('Достигнут максимальный уровень');
+    const unlock = BUILDINGS[key].unlockHq ?? 1;
+    if (ps.buildings.hq < unlock) throw new GameError(`${BUILDINGS[key].name} — с командного пункта ${unlock} уровня`);
     if (key !== 'hq' && level + 1 > ps.buildings.hq) throw new GameError(`Сначала улучшите командный пункт до ${level + 1} уровня`);
     const cost = buildingUpgradeCost(key, level);
     spend(ps, cost);
@@ -135,7 +151,7 @@ export const ACTIONS: Record<string, Handler> = {
     const one = OPERATORS[type].cost;
     const cost = Object.fromEntries(Object.entries(one).map(([k, v]) => [k, v! * count]));
     spend(ps, cost);
-    const t = trainTime(type, ps.buildings.training) * count;
+    const t = Math.round(trainTime(type, ps.buildings.training) * count * instructorMul(ps));
     await addJob(c, ps, 'train', 'train', { type, count }, cost, t, now);
     return `${OPERATORS[type].name} ×${count}: в очереди подготовки`;
   },
@@ -151,7 +167,7 @@ export const ACTIONS: Record<string, Handler> = {
     if (ps.jobs.filter((j) => j.queue === 'train').length >= TRAIN_QUEUE_LIMIT) throw new GameError('Очередь подготовки заполнена');
     const cost = rankUpgradeCost(type, to);
     spend(ps, cost);
-    await addJob(c, ps, 'train', 'rank', { type, toRank: to }, cost, rankUpgradeTime(to, ps.buildings.training), now);
+    await addJob(c, ps, 'train', 'rank', { type, toRank: to }, cost, Math.round(rankUpgradeTime(to, ps.buildings.training) * instructorMul(ps)), now);
     return `${OPERATORS[type].name}: повышение до ранга ${to} в очереди`;
   },
   async recover(c, ps, _a, now) {
@@ -160,12 +176,12 @@ export const ACTIONS: Record<string, Handler> = {
     for (const t of OPERATOR_TYPES) if (ps.ops[t].wounded > 0) { counts[t] = ps.ops[t].wounded; total += ps.ops[t].wounded; }
     if (!total) throw new GameError('Нет раненых операторов');
     const medic = ps.p.skills.medic ?? 0;
-    const recMod = Math.min(0.7, Math.max(-0.5, playerMods(ps, now).recovery));
+    const recMul = recoveryMulOf(playerMods(ps, now).recovery);
     const base = recoveryCost(counts, medic);
-    const cost = { supplies: Math.round((base.supplies ?? 0) * (1 - recMod)) };
+    const cost = { supplies: Math.round((base.supplies ?? 0) * recMul) };
     spend(ps, cost);
     for (const t of OPERATOR_TYPES) if (counts[t]) { ps.ops[t].wounded -= counts[t]!; ps.ops[t].recovering += counts[t]!; }
-    const t = Math.round(recoveryTime(total, medic) * (1 - recMod));
+    const t = Math.round(recoveryTime(total, medic) * recMul);
     await addJob(c, ps, 'recovery', 'recover', { counts }, cost, t, now);
     return `Восстановление ${total} операторов: ${fmt(t)}`;
   },
@@ -178,6 +194,7 @@ export const ACTIONS: Record<string, Handler> = {
     if (ps.vehicles[type]) throw new GameError('Этот транспорт уже есть');
     if (ps.jobs.some((j) => j.kind === 'vehicle_acquire' && j.payload.type === type)) throw new GameError('Уже готовится в мастерской');
     if (ps.buildings.hq < d.unlockHq) throw new GameError(`Нужен командный пункт ${d.unlockHq} уровня`);
+    if (type === 'pickup' && (ps.buildings.motorpool ?? 0) < BUILDING_FX.motorpool.pickupLevel) throw new GameError(`Пикап — с автопарка ${BUILDING_FX.motorpool.pickupLevel} уровня`);
     if (ps.jobs.filter((j) => j.queue === 'workshop').length >= WORKSHOP_QUEUE_LIMIT) throw new GameError('Очередь мастерской заполнена');
     spend(ps, d.acquireCost);
     await addJob(c, ps, 'workshop', 'vehicle_acquire', { type }, d.acquireCost, d.acquireTime, now);
@@ -192,7 +209,7 @@ export const ACTIONS: Record<string, Handler> = {
     const need = vehicleUpgradeRequiredWorkshop(v.level + 1);
     if (ps.buildings.workshop < need) throw new GameError(`Нужна мастерская ${need} уровня`);
     if (ps.jobs.filter((j) => j.queue === 'workshop').length >= WORKSHOP_QUEUE_LIMIT) throw new GameError('Очередь мастерской заполнена');
-    const cost = vehicleUpgradeCost(v.level);
+    const cost = scaleCost(vehicleUpgradeCost(v.level), vehicleUpgradeMul(ps.buildings.motorpool ?? 0));
     spend(ps, cost);
     v.status = 'workshop';
     await addJob(c, ps, 'workshop', 'vehicle_upgrade', { type, toLevel: v.level + 1 }, cost, vehicleUpgradeTime(v.level), now);
@@ -203,7 +220,7 @@ export const ACTIONS: Record<string, Handler> = {
     const v = ps.vehicles[type];
     if (!v || v.status !== 'damaged') throw new GameError('Ремонт не требуется');
     if (ps.jobs.filter((j) => j.queue === 'workshop').length >= WORKSHOP_QUEUE_LIMIT) throw new GameError('Очередь мастерской заполнена');
-    const cost = vehicleRepairCost(v.level);
+    const cost = scaleCost(vehicleRepairCost(v.level), repairMul(ps.buildings.repairyard ?? 0, now));
     spend(ps, cost);
     v.status = 'workshop';
     await addJob(c, ps, 'workshop', 'vehicle_repair', { type }, cost, VEHICLE_REPAIR_TIME, now);
@@ -218,7 +235,8 @@ export const ACTIONS: Record<string, Handler> = {
     const pending = ps.jobs.filter((j) => j.kind === 'craft').length;
     if (ps.equipment.length + pending >= EQUIPMENT_LIMIT) throw new GameError(`Склад оснащения вмещает ${EQUIPMENT_LIMIT} предметов — разберите лишние`);
     if (ps.jobs.filter((j) => j.queue === 'workshop').length >= WORKSHOP_QUEUE_LIMIT) throw new GameError('Очередь мастерской заполнена');
-    const { cost, time } = CRAFT[rarity];
+    const { time } = CRAFT[rarity];
+    const cost = scaleCost(CRAFT[rarity].cost, workshopMul(now));
     spend(ps, cost);
     await addJob(c, ps, 'workshop', 'craft', { type, rarity }, cost, time, now);
     return `${EQUIPMENT[type].name}: сборка начата`;
@@ -254,7 +272,10 @@ export const ACTIONS: Record<string, Handler> = {
     if (!sector) throw new GameError('Сектор не найден');
     const ul = sectorUnlocked(ps, sector.id);
     if (!ul.ok) throw new GameError(`Сектор закрыт: ${ul.why}`);
-    const mission = oneOf(a.mission, SECTOR_MISSIONS[sector.type], 'задание') as MissionType;
+    const campaignKey = a.campaign ? String(a.campaign) : null;
+    const step = campaignKey ? CAMPAIGN.find((s) => s.key === campaignKey) : null;
+    if (campaignKey && (!step || step.kind !== 'mission')) throw new GameError('Это задание кампании сейчас недоступно');
+    const mission = (step ? step.mission : oneOf(a.mission, SECTOR_MISSIONS[sector.type], 'задание')) as MissionType;
     if (mission === 'expedition' && ps.p.cmd_level < 2) throw new GameError('Экспедиции открываются со 2 уровня командира');
     const sec = sectorState(ps, sector.id);
     if (sec.recon < MISSIONS[mission].minRecon) throw new GameError(`Нужна разведанность сектора от ${MISSIONS[mission].minRecon}% — сначала проведите разведку`);
@@ -277,21 +298,24 @@ export const ACTIONS: Record<string, Handler> = {
       const e = ps.equipment.find((x) => x.id === id);
       if (!e) throw new GameError('Предмет оснащения не найден');
       if (e.status !== 'ready') throw new GameError(`${EQUIPMENT[e.type].name} уже в походе`);
+      if ((e.durability ?? 100) <= 0) throw new GameError(`${EQUIPMENT[e.type].name} сломан — нужен ремонт`);
       return e;
     });
     if (new Set(eq.map((e) => EQUIPMENT[e.type].kind)).size !== eq.length) throw new GameError('Нельзя взять два предмета с одинаковым эффектом');
 
+    if (campaignKey) campaignMissionCheck(ps, campaignKey, sector.id, mission, group, vType);
     const ranks = Object.fromEntries(OPERATOR_TYPES.map((t) => [t, ps.ops[t].rank])) as Record<OperatorType, number>;
     const input = {
-      sector, mission, group, ranks,
+      sector: step?.difficulty ? { ...sector, difficulty: step.difficulty } : sector, mission, group, ranks,
       vehicle: { type: vType, level: v.level },
-      equipment: eq.map((e) => ({ id: e.id, type: e.type as EquipmentType, rarity: e.rarity as Rarity, level: e.level })),
+      equipment: eq.map((e) => ({ id: e.id, type: e.type as EquipmentType, rarity: e.rarity as Rarity, level: e.level, durability: e.durability })),
       skills: ps.p.skills, commsLevel: ps.buildings.comms, sectorRecon: sec.recon,
       bonus: undefined as ReturnType<typeof dispatchBonus> | undefined,
     };
     const chosen = pickSoldiers(ps, group);
-    input.bonus = dispatchBonus(ps, sector.id, now, chosen.map((x) => ({ type: x.type, level: x.level, trait: x.trait })));
+    input.bonus = dispatchBonus(ps, sector.id, now, chosen, group, !!step?.night);
     const plan = planExpedition(input);
+    if (campaignKey) (plan as any).campaign = campaignKey;
     if (plan.size < 1) throw new GameError('В группе должен быть хотя бы один оператор');
     if (plan.size > plan.capacity) throw new GameError(`Вместимость группы — ${plan.capacity} операторов`);
     spend(ps, plan.cost);
@@ -408,7 +432,8 @@ export const ACTIONS: Record<string, Handler> = {
     if (ps.expeditions.length || ps.jobs.length) throw new GameError('Сначала дождитесь возвращения групп и окончания всех очередей');
     ps.meta.prestige++;
     bumpStat(ps, 'prestige');
-    for (const k of Object.keys(ps.buildings) as BuildingKey[]) ps.buildings[k] = 1;
+    for (const k of Object.keys(ps.buildings) as BuildingKey[]) ps.buildings[k] = LATE_BUILDINGS.includes(k) ? 0 : 1;
+    for (const o of ps.outposts) o.removed = true;
     for (const t of OPERATOR_TYPES) {
       const o = ps.ops[t];
       const keep = OPERATORS[t].award ? o.available + o.wounded + o.recovering : 0;
@@ -438,6 +463,41 @@ export const ACTIONS: Record<string, Handler> = {
   },
 
   ...SOCIAL_ACTIONS,
+  ...deepActions(addJob),
+
+  /* ── Бойцы: специализация, инструкторы, шрамы ── */
+  async soldierSpec(_c, ps, a) {
+    const s = ps.soldiers.find((x) => x.id === Number(a.id) && x.status !== 'lost' && x.status !== 'retired');
+    if (!s) throw new GameError('Боец не найден');
+    if (s.spec) throw new GameError('Специализация уже выбрана');
+    if (s.level < SPEC_LEVEL) throw new GameError(`Специализация — с ${SPEC_LEVEL} уровня бойца`);
+    const sp = specByKey(String(a.spec));
+    if (!sp || sp.type !== s.type) throw new GameError('Эта специализация не подходит бойцу');
+    s.spec = sp.key;
+    s.dirty = true;
+    return `«${s.name}» теперь ${sp.name.toLowerCase()}`;
+  },
+  async setInstructor(_c, ps, a) {
+    const s = ps.soldiers.find((x) => x.id === Number(a.id) && x.status !== 'lost' && x.status !== 'retired');
+    if (!s) throw new GameError('Боец не найден');
+    const on = !!a.on;
+    if (on) {
+      if (s.level < SOLDIER_MAX_LEVEL) throw new GameError(`Инструктором может стать боец ${SOLDIER_MAX_LEVEL} уровня`);
+      if (ps.soldiers.filter((x) => x.instructor && x !== s && x.status !== 'lost' && x.status !== 'retired').length >= MAX_INSTRUCTORS) throw new GameError(`Инструкторов не больше ${MAX_INSTRUCTORS}`);
+    }
+    s.instructor = on;
+    s.dirty = true;
+    return on ? `«${s.name}» назначен инструктором: подготовка быстрее, в походы — в последнюю очередь` : `«${s.name}» вернулся в строй`;
+  },
+  async healScars(_c, ps, a) {
+    if ((ps.buildings.medbay ?? 0) < 1) throw new GameError('Нужен медпункт');
+    const s = ps.soldiers.find((x) => x.id === Number(a.id) && x.status !== 'lost' && x.status !== 'retired');
+    if (!s || !s.scars) throw new GameError('Шрамов нет');
+    spend(ps, healScarsCost(s.scars));
+    s.scars = 0;
+    s.dirty = true;
+    return `Медпункт свёл шрамы «${s.name}»`;
+  },
 
   /* ── Прочее ── */
   async claimDaily(_c, ps, a, now) {

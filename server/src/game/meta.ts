@@ -12,6 +12,9 @@ import {
   composeParts, dispatchParts, prestigeMods, seasonIndex, seasonKey, seasonTheme, soldierLevel, soldierMods, streakReward, traitExposure, weekIndex, weekKey,
 } from '../../../shared/progression.js';
 import { ExpeditionResult, rng } from '../../../shared/calc.js';
+import { EPOCH, countBondPairs } from '../../../shared/progression.js';
+import { FATIGUE_PER_MISSION, eventKey, eventWindow, fatigueNow } from '../../../shared/content.js';
+import { deepDispatchParts, deepModParts } from './deep.js';
 import type { Db } from '../db.js';
 import { ExpRow, PS, bumpStat, costText, grant, grantChevron } from './state.js';
 
@@ -20,6 +23,7 @@ import { ExpRow, PS, bumpStat, costText, grant, grantChevron } from './state.js'
 export interface SoldierRow {
   id: number; type: OperatorType; name: string; trait: SoldierTrait; xp: number; level: number; missions: number; scars: number;
   status: 'ready' | 'mission' | 'wounded' | 'recovering' | 'lost' | 'retired'; expedition_id: number | null; created_at: number; lost_at: number | null;
+  spec: string | null; fatigue: number; fatigue_at: number | null; bonds: Record<string, number>; instructor: boolean;
   dirty?: boolean;
 }
 export interface Meta {
@@ -54,6 +58,8 @@ export async function loadMeta(c: Db, ps: PS, row: any, now: number) {
   };
   const w = weekKey(weekIndex(now));
   const s = seasonKey(seasonIndex(now));
+  const evw = eventWindow(now, EPOCH);
+  const eKey = eventKey(evw.active ? evw.week : evw.week - 1);
   const [rs, so, wk, sc, cm] = await Promise.all([
     c.query('SELECT key FROM research WHERE user_id=$1', [ps.userId]),
     c.query(
@@ -62,11 +68,11 @@ export async function loadMeta(c: Db, ps: PS, row: any, now: number) {
       [ps.userId],
     ),
     c.query('SELECT counters, claimed FROM weekly WHERE user_id=$1 AND week=$2', [ps.userId, w]),
-    c.query('SELECT period, points, counters FROM scores WHERE user_id=$1 AND period = ANY($2)', [ps.userId, [w, s]]),
+    c.query('SELECT period, points, counters FROM scores WHERE user_id=$1 AND period = ANY($2)', [ps.userId, [w, s, eKey]]),
     c.query('SELECT company_id FROM company_members WHERE user_id=$1', [ps.userId]),
   ]);
   ps.research = new Set(rs.rows.map((r) => r.key));
-  ps.soldiers = so.rows.map((r) => ({ ...r, created_at: ms(r.created_at)!, lost_at: ms(r.lost_at) }));
+  ps.soldiers = so.rows.map((r) => ({ ...r, created_at: ms(r.created_at)!, lost_at: ms(r.lost_at), fatigue_at: ms(r.fatigue_at), bonds: r.bonds ?? {} }));
   ps.weekly = { week: w, counters: wk.rows[0]?.counters ?? {}, claimed: wk.rows[0]?.claimed ?? {} };
   const find = (p: string): Period => {
     const r = sc.rows.find((x) => x.period === p);
@@ -74,6 +80,7 @@ export async function loadMeta(c: Db, ps: PS, row: any, now: number) {
   };
   ps.scoreW = find(w);
   ps.scoreS = find(s);
+  ps.scoreE = find(eKey);
   ps.companyId = cm.rows[0]?.company_id ?? null;
 }
 
@@ -87,16 +94,18 @@ export async function saveMeta(c: Db, ps: PS) {
   );
   for (const s of ps.soldiers) {
     if (!s.dirty) continue;
-    await c.query('UPDATE soldiers SET xp=$2, level=$3, missions=$4, scars=$5, status=$6, expedition_id=$7, lost_at=to_timestamp($8/1000.0) WHERE id=$1', [
-      s.id, s.xp, s.level, s.missions, s.scars, s.status, s.expedition_id, s.lost_at,
-    ]);
+    await c.query(
+      `UPDATE soldiers SET xp=$2, level=$3, missions=$4, scars=$5, status=$6, expedition_id=$7, lost_at=to_timestamp($8/1000.0),
+         spec=$9, fatigue=$10, fatigue_at=to_timestamp($11/1000.0), bonds=$12, instructor=$13 WHERE id=$1`,
+      [s.id, s.xp, s.level, s.missions, s.scars, s.status, s.expedition_id, s.lost_at, s.spec, Math.round(s.fatigue), s.fatigue_at, JSON.stringify(s.bonds), s.instructor],
+    );
     s.dirty = false;
   }
   await c.query(
     `INSERT INTO weekly(user_id,week,counters,claimed) VALUES ($1,$2,$3,$4) ON CONFLICT (user_id,week) DO UPDATE SET counters=$3, claimed=$4`,
     [ps.userId, ps.weekly.week, JSON.stringify(ps.weekly.counters), JSON.stringify(ps.weekly.claimed)],
   );
-  for (const p of [ps.scoreW, ps.scoreS]) {
+  for (const p of [ps.scoreW, ps.scoreS, ps.scoreE]) {
     if (!p.points && !Object.keys(p.counters).length) continue;
     await c.query(
       `INSERT INTO scores(user_id,period,points,counters) VALUES ($1,$2,$3,$4) ON CONFLICT (user_id,period) DO UPDATE SET points=$3, counters=$4`,
@@ -119,6 +128,7 @@ export function playerModParts(ps: PS, now: number): ModPart[] {
   for (const st of activeSets(owned)) parts.push({ label: `Комплект «${st.name}»`, mods: st.mods as Partial<Mods> });
   const theme = seasonTheme(seasonIndex(now));
   parts.push({ label: `Сезон «${theme.name}»`, mods: theme.mods });
+  parts.push(...deepModParts(ps));
   return parts;
 }
 export function sumParts(parts: ModPart[]): Mods {
@@ -138,8 +148,9 @@ export function composeBonus(parts: ModPart[]) {
   };
 }
 /** Бонусы для конкретного похода: всё постоянное + обстановка + горячая цель + именные бойцы. */
-export function dispatchBonus(ps: PS, sectorId: number, now: number, chosen: SoldierLite[]) {
-  return composeParts(dispatchParts(playerModParts(ps, now), sectorId, now, chosen));
+export function dispatchBonus(ps: PS, sectorId: number, now: number, chosen: SoldierRow[], group: Partial<Record<OperatorType, number>> = {}, night = false) {
+  const lite = chosen.map((x) => ({ type: x.type, level: x.level, trait: x.trait, spec: x.spec, fatigue: fatigueNow(x.fatigue, x.fatigue_at, now) }));
+  return composeParts(dispatchParts(playerModParts(ps, now), sectorId, now, lite, countBondPairs(chosen), deepDispatchParts(ps, sectorId, group, now, night)));
 }
 
 /* ───────────── очки и счётчики ───────────── */
@@ -147,6 +158,10 @@ export function dispatchBonus(ps: PS, sectorId: number, now: number, chosen: Sol
 export function track(ps: PS, key: string, n = 1) {
   ps.weekly.counters[key] = (ps.weekly.counters[key] ?? 0) + n;
   ps.scoreS.counters[key] = (ps.scoreS.counters[key] ?? 0) + n;
+  // очки события выходных
+  const ev = eventWindow(ps.clock ?? Date.now(), EPOCH);
+  const pts = ev.active ? ev.event.points[key] ?? 0 : 0;
+  if (pts && ps.scoreE.period === eventKey(ev.week)) ps.scoreE.points += Math.round(pts * n);
 }
 export function addPoints(ps: PS, n: number) {
   if (n <= 0) return;
@@ -166,10 +181,22 @@ async function newSoldier(c: Db, ps: PS, type: OperatorType): Promise<SoldierRow
   if (used.has(name)) name = `${name}-${used.size + 1}`;
   const traits = Object.keys(TRAITS) as SoldierTrait[];
   const trait = traits[Math.floor(Math.random() * traits.length)];
+  return insertSoldier(c, ps, type, name, trait);
+}
+async function insertSoldier(c: Db, ps: PS, type: OperatorType, name: string, trait: SoldierTrait): Promise<SoldierRow> {
   const r = await c.query(`INSERT INTO soldiers(user_id,type,name,trait,status) VALUES ($1,$2,$3,$4,'ready') RETURNING id, created_at`, [ps.userId, type, name, trait]);
-  const s: SoldierRow = { id: r.rows[0].id, type, name, trait, xp: 0, level: 1, missions: 0, scars: 0, status: 'ready', expedition_id: null, created_at: ms(r.rows[0].created_at)!, lost_at: null };
+  const s: SoldierRow = {
+    id: r.rows[0].id, type, name, trait, xp: 0, level: 1, missions: 0, scars: 0, status: 'ready', expedition_id: null, created_at: ms(r.rows[0].created_at)!, lost_at: null,
+    spec: null, fatigue: 0, fatigue_at: null, bonds: {}, instructor: false,
+  };
   ps.soldiers.push(s);
   return s;
+}
+/** Именной боец-награда: увеличивает отряд и сразу получает своё имя. */
+export async function grantNamedSoldier(c: Db, ps: PS, type: OperatorType, name: string, trait: string) {
+  ps.ops[type].available += 1;
+  const t = (Object.keys(TRAITS) as SoldierTrait[]).includes(trait as SoldierTrait) ? (trait as SoldierTrait) : 'tough';
+  await insertSoldier(c, ps, type, name, t);
 }
 
 /** Именные бойцы всегда соответствуют счётчикам отряда (счётчики — главный источник истины). */
@@ -213,7 +240,9 @@ export function pickSoldiers(ps: PS, group: Partial<Record<OperatorType, number>
   for (const t of OPERATOR_TYPES) {
     const n = group[t] ?? 0;
     if (!n) continue;
-    const ready = ps.soldiers.filter((s) => s.type === t && s.status === 'ready').sort((a, b) => b.level - a.level || b.xp - a.xp);
+    const now = Date.now();
+    const score = (s: SoldierRow) => (s.instructor ? -1000 : 0) + s.level * 10 - fatigueNow(s.fatigue, s.fatigue_at, now) / 10;
+    const ready = ps.soldiers.filter((s) => s.type === t && s.status === 'ready').sort((a, b) => score(b) - score(a) || b.xp - a.xp);
     out.push(...ready.slice(0, n));
   }
   return out;
@@ -249,6 +278,7 @@ export function soldiersAfterExpedition(ps: PS, x: ExpRow, res: ExpeditionResult
     };
     for (const s of take(cas.lost)) {
       s.status = 'lost';
+      s.instructor = false;
       s.lost_at = t;
       s.expedition_id = null;
       s.dirty = true;
@@ -273,6 +303,14 @@ export function soldiersAfterExpedition(ps: PS, x: ExpRow, res: ExpeditionResult
       s.dirty = true;
       gainXp(s, difficulty, res.outcome, levelUps);
     }
+  }
+  // усталость и слаженность расчётов
+  for (const s of members) {
+    if (s.status === 'lost') continue;
+    s.fatigue = Math.min(100, fatigueNow(s.fatigue, s.fatigue_at, t) + FATIGUE_PER_MISSION);
+    s.fatigue_at = t;
+    for (const o of members) if (o !== s) s.bonds[String(o.id)] = (s.bonds[String(o.id)] ?? 0) + 1;
+    s.dirty = true;
   }
   return { fallen, wounded, patched, levelUps };
 }
@@ -341,6 +379,7 @@ export async function settleMeta(c: Db, ps: PS, now: number) {
   for (const h of hits.rows) {
     const won = h.outcome === 'fail';
     const at = new Date(h.at).getTime();
+    ps.clock = at;
     let lost: Cost = {};
     if (!won) lost = take(ps, h.loot);
     else {
@@ -363,7 +402,8 @@ export async function settleMeta(c: Db, ps: PS, now: number) {
     const maxDiff = Math.max(1, ...SECTORS.filter((s) => (ps.sectors[s.id]?.successes ?? 0) > 0).map((s) => s.difficulty));
     const theme = seasonTheme(seasonIndex(now)).key;
     for (let w = Math.floor(start / ATTACK_WINDOW); w <= Math.floor(now / ATTACK_WINDOW); w++) {
-      const a = attackInWindow(ps.userId, w, maxDiff, theme);
+      const ev = eventWindow(now, EPOCH);
+      const a = attackInWindow(ps.userId, w, maxDiff, theme, ev.active ? ev.event.attackBoost ?? 0 : 0);
       if (!a || a.at <= start || a.at > now) continue;
       await resolveAttack(c, ps, a.at, a.strength, w);
     }
@@ -391,9 +431,11 @@ export async function settleMeta(c: Db, ps: PS, now: number) {
 
   // сюжет сезона
   advanceSeasonStory(ps);
+  ps.clock = undefined;
 }
 
 async function resolveAttack(c: Db, ps: PS, at: number, strength: number, w: number) {
+  ps.clock = at;
   const rand = rng(ps.userId * 7 + w);
   const defense = defenseOf(ps, at);
   const roll = 0.85 + rand() * 0.3;

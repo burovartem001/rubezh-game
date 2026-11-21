@@ -15,6 +15,11 @@ export const BUILDING_SPOTS: Record<BuildingKey, { x: number; y: number; zoom: n
   fueldepot: { x: 0.9, y: 0.5, zoom: 3.6 },
   supply: { x: 0.87, y: 0.66, zoom: 3.4 },
   defense: { x: 0.62, y: 0.86, zoom: 3.2 },
+  motorpool: { x: 0.72, y: 0.79, zoom: 3.2 },
+  repairyard: { x: 0.46, y: 0.6, zoom: 3.4 },
+  medbay: { x: 0.14, y: 0.53, zoom: 3.4 },
+  analytics: { x: 0.22, y: 0.31, zoom: 3.4 },
+  testrange: { x: 0.8, y: 0.4, zoom: 3.4 },
 };
 
 /** Фрагмент панорамы, отцентрованный на точке (cx, cy) с увеличением zoom. aspect — ширина/высота рамки. */

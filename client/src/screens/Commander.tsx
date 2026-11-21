@@ -1,3 +1,4 @@
+import { AchievementsPanel } from './Deep';
 import React, { useEffect, useState } from 'react';
 import {
   AWARDS, AWARD_KEYS, AWARD_SOURCE_NAME, AwardKey, OPERATORS, OperatorType, VEHICLES, VehicleType, equipmentEffectText,
@@ -163,6 +164,7 @@ function ProfileTab({ onChevrons }: { onChevrons: () => void }) {
         ))}
       </div>
 
+      <AchievementsPanel />
       <section className="panel">
         <h2>
           <Icon name="reports" size={20} /> Послужной список

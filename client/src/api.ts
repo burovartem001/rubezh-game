@@ -1,10 +1,11 @@
 import type { Cost, MissionType, Outcome, OperatorType, VehicleType, EquipmentType, Rarity, DailyKey, BuildingKey, Skills } from '../../shared/config';
 import type { Casualties, Reason } from '../../shared/calc';
 import type { Contract, Mods, SoldierTrait } from '../../shared/progression';
+import type { DroneSlot } from '../../shared/content';
 
 /* Типы состояния, приходящего с сервера (server/src/game/state.ts → view) */
 export interface OpRow { available: number; on_mission: number; wounded: number; recovering: number; lost_total: number; trained: number; rank: number }
-export interface Job { id: number; queue: 'build' | 'train' | 'workshop' | 'recovery' | 'research'; kind: string; payload: any; startAt: number; endAt: number }
+export interface Job { id: number; queue: 'build' | 'train' | 'workshop' | 'recovery' | 'research' | 'outpost'; kind: string; payload: any; startAt: number; endAt: number }
 export interface Expedition {
   id: number; sectorId: number; mission: MissionType; group: Partial<Record<OperatorType, number>>; vehicle: VehicleType; equipment: number[];
   cost: Cost; startAt: number; endAt: number; forecast: { outcomeLow: Outcome; outcomeHigh: Outcome; lossCategory: string };
@@ -16,16 +17,24 @@ export interface Report {
   outcome: Outcome; ratio: number; casualties: Partial<Record<OperatorType, Casualties>>; totalWounded: number; totalLost: number; totalFieldRecovered: number;
   vehicleDamaged: boolean; rewards: Cost; xp: number; levelUp: number | null; drop: string | null;
   recon: { before: number; after: number }; control: { before: number; after: number }; reasons: Reason[];
-  kind?: 'expedition' | 'pvp_attack' | 'defense' | 'pvp_defense';
+  kind?: 'expedition' | 'pvp_attack' | 'defense' | 'pvp_defense' | 'outpost';
   target?: { id: number; callsign: string } | null;
   soldiers?: { fallen: string[]; wounded: string[]; patched: string[]; levelUps: { name: string; level: number }[] };
   companyDamage?: number;
   won?: boolean; attack?: number; defense?: number; lost?: Cost; wounded?: string[]; reward?: Cost; attacker?: string; attackerId?: number; at?: number;
   sectorHit?: { id: number; name: string; before: number; after: number } | null;
+  // глубина
+  broken?: string[];
+  campaign?: { title: string; chapter: number };
+  blueprint?: string;
+  encounter?: { key: string; resolved: boolean; option?: number; result?: string; gains?: string[] };
+  sectorName_?: string;
+  before?: number; after?: number;
 }
 export interface Soldier {
   id: number; type: OperatorType; name: string; trait: SoldierTrait; xp: number; level: number; missions: number; scars: number;
   status: 'ready' | 'mission' | 'wounded' | 'recovering' | 'lost'; expedition_id: number | null; created_at: number; lost_at: number | null;
+  spec: string | null; fatigue: number; fatigue_at: number | null; bonds: Record<string, number>; instructor: boolean;
 }
 export interface LeaderRow { rank: number; id: number; callsign: string; portrait: number; chevron: string; level: number; points: number; tag: string | null }
 export interface CompanyListItem { id: number; name: string; tag: string; motto: string; members: number }
@@ -42,8 +51,11 @@ export interface PublicProfile {
   chevrons: { key: string; source: string; at: number }[];
   awards: { award: string; count: number; at: number }[];
   stats: { expeditionsSent: number; expeditionsWon: number; flawless: number; buildsDone: number; controlled: number };
+  achPoints?: number;
+  models?: { cls: OperatorType; name: string; color: string }[];
+  mascots?: string[];
 }
-export interface Equipment { id: number; type: EquipmentType; rarity: Rarity; level: number; status: 'ready' | 'mission'; source: string }
+export interface Equipment { id: number; type: EquipmentType; rarity: Rarity; level: number; status: 'ready' | 'mission'; source: string; durability: number }
 export interface SectorState { id: number; recon: number; control: number; attempts: number; successes: number; unlocked: boolean; lockReason: string; control_at?: number | null }
 export interface GameState {
   serverTime: number;
@@ -84,7 +96,18 @@ export interface GameState {
   createdAt: number;
   reports: Report[];
   unreadReports: number;
+  // глубина и сюжет
+  blueprints: string[];
+  models: DroneModel[];
+  outposts: { id: number; sector_id: number; level: number; checked_at: number }[];
+  campaign: { step: number; flags: Record<string, string> };
+  event: { key: string; active: boolean; start: number; end: number; nextStart: number; week: number; points: number; claimed: Record<string, number> };
+  achievements: { key: string; value: number; tier: number }[];
+  achPoints: number;
+  mascots: string[];
+  instructorsReady: number;
 }
+export interface DroneModel { cls: OperatorType; name: string; color: string; parts: Record<DroneSlot, string>; durability: number; built_at: number }
 
 const TOKEN_KEY = 'rubezh.token';
 let memToken: string | null = null;

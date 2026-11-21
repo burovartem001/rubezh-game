@@ -50,6 +50,8 @@ import {
   Meta, Period, SoldierRow, addPoints, companyDamage, defenseOf, loadMeta, playerModParts, playerMods, saveMeta, settleMeta, soldiersAfterExpedition,
   streakInfo, track, trackExpedition,
 } from './meta.js';
+import { Campaign, ModelRow, OutpostRow, afterExpeditionDeep, deepView, loadDeep, saveDeep, settleDeep } from './deep.js';
+import { LATE_BUILDINGS } from '../../../shared/config.js';
 import type { Db } from '../db.js';
 
 export class GameError extends Error {
@@ -60,8 +62,8 @@ export class GameError extends Error {
 
 export interface OpRow { available: number; on_mission: number; wounded: number; recovering: number; lost_total: number; trained: number; rank: number }
 export interface VehRow { level: number; status: 'ready' | 'mission' | 'damaged' | 'workshop' }
-export interface EqRow { id: number; type: EquipmentType; rarity: Rarity; level: number; status: 'ready' | 'mission'; source: string; dirty?: boolean }
-export interface JobRow { id: number; queue: 'build' | 'train' | 'workshop' | 'recovery' | 'research'; kind: string; payload: any; cost: Cost; start_at: number; end_at: number; done: boolean }
+export interface EqRow { id: number; type: EquipmentType; rarity: Rarity; level: number; status: 'ready' | 'mission'; source: string; durability: number; dirty?: boolean }
+export interface JobRow { id: number; queue: 'build' | 'train' | 'workshop' | 'recovery' | 'research' | 'outpost'; kind: string; payload: any; cost: Cost; start_at: number; end_at: number; done: boolean }
 export interface SecRow { recon: number; control: number; attempts: number; successes: number; control_at?: number | null }
 export interface ExpRow {
   id: number; sector_id: number; mission: MissionType; group_comp: Group; vehicle: VehicleType; equipment: number[];
@@ -95,7 +97,15 @@ export interface PS {
   weekly: { week: string; counters: Record<string, number>; claimed: Record<string, boolean> };
   scoreW: Period;
   scoreS: Period;
+  scoreE: Period;
+  /** Время события, которое сейчас досчитывается (для очков события выходных); вне досчёта — не задано. */
+  clock?: number;
   companyId: number | null;
+  blueprints: Set<string>;
+  models: ModelRow[];
+  outposts: OutpostRow[];
+  campaign: Campaign;
+  newEncounters: number;
 }
 
 const ms = (d: Date | string) => new Date(d).getTime();
@@ -108,7 +118,7 @@ export async function createPlayer(c: Db, userId: number, callsign: string, comm
      VALUES ($1,$2,$3,$4,$5,$6,$7,to_timestamp($8/1000.0))`,
     [userId, callsign, commanderName, START_RESOURCES.supplies, START_RESOURCES.parts, START_RESOURCES.fuel, START_RESOURCES.data, now],
   );
-  for (const k of BUILDING_KEYS) await c.query('INSERT INTO buildings(user_id,key,level) VALUES ($1,$2,1)', [userId, k]);
+  for (const k of BUILDING_KEYS) await c.query('INSERT INTO buildings(user_id,key,level) VALUES ($1,$2,$3)', [userId, k, LATE_BUILDINGS.includes(k) ? 0 : 1]);
   for (const t of OPERATOR_TYPES) await c.query('INSERT INTO operators(user_id,type,available) VALUES ($1,$2,$3)', [userId, t, START_OPERATORS[t]]);
   await c.query(`INSERT INTO vehicles(user_id,type,level,status) VALUES ($1,'moto',1,'ready')`, [userId]);
   for (const k of START_CHEVRONS) await c.query(`INSERT INTO player_chevrons(user_id,chevron,source) VALUES ($1,$2,'start')`, [userId, k]);
@@ -122,7 +132,7 @@ export async function loadState(c: Db, userId: number): Promise<PS> {
     c.query('SELECT key, level FROM buildings WHERE user_id=$1', [userId]),
     c.query('SELECT * FROM operators WHERE user_id=$1', [userId]),
     c.query('SELECT type, level, status FROM vehicles WHERE user_id=$1', [userId]),
-    c.query('SELECT id, type, rarity, level, status, source FROM equipment WHERE user_id=$1 ORDER BY id', [userId]),
+    c.query('SELECT id, type, rarity, level, status, source, durability FROM equipment WHERE user_id=$1 ORDER BY id', [userId]),
     c.query('SELECT * FROM jobs WHERE user_id=$1 AND NOT done ORDER BY end_at, id', [userId]),
     c.query('SELECT * FROM sectors WHERE user_id=$1', [userId]),
     c.query(`SELECT * FROM expeditions WHERE user_id=$1 AND status='active' ORDER BY end_at, id`, [userId]),
@@ -152,7 +162,8 @@ export async function loadState(c: Db, userId: number): Promise<PS> {
     newChevrons: [],
   } as unknown as PS;
   await loadMeta(c, ps, r, Date.now());
-  for (const k of BUILDING_KEYS) ps.buildings[k] ??= 1;
+  await loadDeep(c, ps, r);
+  for (const k of BUILDING_KEYS) ps.buildings[k] ??= LATE_BUILDINGS.includes(k) ? 0 : 1;
   for (const t of OPERATOR_TYPES) ps.ops[t] ??= { available: 0, on_mission: 0, wounded: 0, recovering: 0, lost_total: 0, trained: 0, rank: 1 };
   return ps;
 }
@@ -182,7 +193,7 @@ export async function saveState(c: Db, ps: PS) {
       [ps.userId, t, v!.level, v!.status],
     );
   }
-  for (const e of ps.equipment) if (e.dirty) await c.query('UPDATE equipment SET level=$2, status=$3 WHERE id=$1', [e.id, e.level, e.status]);
+  for (const e of ps.equipment) if (e.dirty) await c.query('UPDATE equipment SET level=$2, status=$3, durability=$4 WHERE id=$1', [e.id, e.level, e.status, Math.max(0, Math.min(100, e.durability ?? 100))]);
   for (const [id, s] of Object.entries(ps.sectors)) {
     await c.query(
       `INSERT INTO sectors(user_id,sector_id,recon,control,attempts,successes,control_at) VALUES ($1,$2,$3,$4,$5,$6,to_timestamp($7/1000.0))
@@ -197,6 +208,7 @@ export async function saveState(c: Db, ps: PS) {
     );
   }
   await saveMeta(c, ps);
+  await saveDeep(c, ps);
 }
 
 /* ───────────── ресурсы ───────────── */
@@ -286,7 +298,7 @@ export async function addEquipment(c: Db, ps: PS, type: EquipmentType, rarity: R
     return `Склад оснащения заполнен: ${EQUIPMENT[type].name} разобран, получено комплектующих ${comp.parts}`;
   }
   const r = await c.query('INSERT INTO equipment(user_id,type,rarity,source) VALUES ($1,$2,$3,$4) RETURNING id', [ps.userId, type, rarity, source]);
-  ps.equipment.push({ id: r.rows[0].id, type, rarity, level: 1, status: 'ready', source });
+  ps.equipment.push({ id: r.rows[0].id, type, rarity, level: 1, status: 'ready', source, durability: 100 });
   return `Получено оснащение: ${EQUIPMENT[type].name} (${RARITY_NAMES[rarity].toLowerCase()})`;
 }
 
@@ -369,9 +381,11 @@ export async function settle(c: Db, ps: PS, now: number, opts: { showAwards?: bo
   ].sort((a, b) => a.t - b.t);
   for (const ev of events) {
     accrue(ps, ev.t);
+    ps.clock = ev.t;
     if (ev.job) await completeJob(c, ps, ev.job, ev.t);
     else if (ev.exp) await completeExpedition(c, ps, ev.exp, ev.t);
   }
+  ps.clock = undefined;
   accrue(ps, now);
   // новые награды за заслуги: показать игроку один раз
   const unseen = opts.showAwards === false ? [] : ps.awards.filter((a) => !a.seen);
@@ -384,6 +398,7 @@ export async function settle(c: Db, ps: PS, now: number, opts: { showAwards?: bo
     }
   }
   await settleMeta(c, ps, now);
+  await settleDeep(c, ps, now);
   ps.jobs = ps.jobs.filter((j) => !j.done);
   ps.expeditions = ps.expeditions.filter((x) => x.status === 'active');
   await checkTutorial(c, ps);
@@ -467,7 +482,39 @@ async function completeJob(c: Db, ps: PS, job: JobRow, t: number) {
       }
       break;
     }
+    case 'drone_model': {
+      const existing = ps.models.find((m) => m.cls === pl.cls);
+      const row = { cls: pl.cls, name: pl.name, color: pl.color, parts: pl.parts, durability: 100, built_at: t, dirty: true };
+      if (existing) Object.assign(existing, row);
+      else ps.models.push(row);
+      bumpStat(ps, 'modelsBuilt');
+      track(ps, 'model');
+      ps.notices.push({ kind: 'success', text: `Модель «${pl.name}» собрана и поставлена на вооружение (${OPERATORS[pl.cls as OperatorType].name.toLowerCase()})` });
+      break;
+    }
+    case 'outpost_build': {
+      if (!ps.outposts.some((o) => o.sector_id === pl.sectorId && !o.removed)) {
+        const r = await c.query('INSERT INTO outposts(user_id, sector_id, level) VALUES ($1,$2,1) ON CONFLICT (user_id, sector_id) DO UPDATE SET level=1 RETURNING id', [ps.userId, pl.sectorId]);
+        ps.outposts.push({ id: Number(r.rows[0].id), sector_id: pl.sectorId, level: 1, checked_at: t });
+        bumpStat(ps, 'outpostsBuilt');
+        ps.notices.push({ kind: 'success', text: `Передовой пункт у «${sectorById(pl.sectorId)?.name}» построен` });
+      }
+      break;
+    }
+    case 'outpost_upgrade': {
+      const o = ps.outposts.find((x) => x.id === pl.id && !x.removed);
+      if (o) {
+        o.level = Math.max(o.level, pl.toLevel);
+        o.dirty = true;
+        ps.notices.push({ kind: 'success', text: `Передовой пункт у «${sectorById(o.sector_id)?.name}»: уровень ${o.level}` });
+      } else {
+        grant(ps, job.cost ?? {});
+        ps.notices.push({ kind: 'warn', text: 'Пункт потерян до конца работ — материалы вернулись на склад' });
+      }
+      break;
+    }
     case 'craft': {
+      track(ps, 'craft');
       const text = await addEquipment(c, ps, pl.type, pl.rarity, 'Мастерская');
       ps.notices.push({ kind: 'success', text });
       break;
@@ -510,6 +557,7 @@ async function completeExpedition(c: Db, ps: PS, x: ExpRow, t: number) {
   const soldierNews = soldiersAfterExpedition(ps, x, res, t, sector.difficulty, Number((x as any).seed ?? x.id));
   trackExpedition(ps, x, res, sector.difficulty);
   const dmg = await companyDamage(c, ps, x, res, sector.difficulty, ps.scoreW.period);
+  const deepExtra = await afterExpeditionDeep(c, ps, x, res, t);
 
   const lvlBefore = ps.p.cmd_level;
   ps.p.cmd_xp += res.xp;
@@ -560,6 +608,7 @@ async function completeExpedition(c: Db, ps: PS, x: ExpRow, t: number) {
     target: target ?? null,
     soldiers: soldierNews,
     companyDamage: dmg,
+    ...deepExtra,
   };
   const ins = await c.query(
     'INSERT INTO reports(user_id, expedition_id, created_at, body) VALUES ($1,$2,to_timestamp($3/1000.0),$4) ON CONFLICT (expedition_id) DO NOTHING',
@@ -656,6 +705,7 @@ export function view(ps: PS, now: number) {
     linkCode: ps.meta.linkCode && (ps.meta.linkCodeExp ?? 0) > now ? { code: ps.meta.linkCode, until: ps.meta.linkCodeExp } : null,
     defense: defenseOf(ps, now),
     createdAt: ps.meta.createdAt,
+    ...deepView(ps, now),
   };
 }
 export type StateView = ReturnType<typeof view>;

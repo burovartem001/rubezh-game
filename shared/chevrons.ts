@@ -17,10 +17,12 @@ export const CHEVRON_RARITY_COLORS: Record<ChevronRarity, string> = {
   legendary: '#edbb76',
 };
 
-export type ChevronCategory = 'start' | 'game' | 'rating' | 'site';
+export type ChevronCategory = 'start' | 'game' | 'story' | 'event' | 'rating' | 'site';
 export const CHEVRON_CATEGORIES: { key: ChevronCategory; name: string; text: string }[] = [
   { key: 'start', name: 'Стартовые', text: 'Выдаются каждому командиру при поступлении на полигон.' },
   { key: 'game', name: 'За достижения в игре', text: 'Открываются сами, когда выполнено условие.' },
+  { key: 'story', name: 'За сюжет', text: 'Выдаются по ходу сюжетной кампании.' },
+  { key: 'event', name: 'За события', text: 'Высшая ступень события выходных.' },
   { key: 'rating', name: 'За рейтинг и сезоны', text: 'Выдаются по итогам недели и сезона лучшим командирам.' },
   { key: 'site', name: 'Возможно получить за особые заслуги на сайте', text: 'Выдаёт сайт «Учёт дронов» — за особые заслуги. Условия появятся позже.' },
 ];
@@ -110,6 +112,20 @@ export const CHEVRONS: ChevronDef[] = [
     condition: { kind: 'stat', key: 'seasonStoryDone', value: 1, text: 'Пройти сюжет сезона до конца' } },
   { key: 'prestige', name: 'Новый рубеж', motto: 'ПРЕСТИЖ', category: 'game', rarity: 'common', shape: 'diamond', bg: '#4d3a14', bg2: '#2b200a', border: '#f6dc8a', ink: '#fff6d6', icon: 'up',
     condition: { kind: 'stat', key: 'prestige', value: 1, text: 'Перевести полигон на новый рубеж (престиж)' } },
+
+  // ── за сюжет
+  { key: 'storyHelper', name: 'Сосед в беде', motto: 'ВЗАИМОВЫРУЧКА', category: 'story', rarity: 'common', shape: 'round', bg: '#3a4f2a', bg2: '#222f18', border: '#c7dda6', ink: '#eef6e6', icon: 'heart' },
+  { key: 'campaignHero', name: 'Сигнал заглушён', motto: 'РУБЕЖ НАШ', category: 'story', rarity: 'common', shape: 'shield', bg: '#4f1f1f', bg2: '#2f1212', border: '#f6dc8a', ink: '#fff6d6', icon: 'radio' },
+  { key: 'mechanicGold', name: 'Золотые руки полигона', motto: 'КОНСТРУКТОР', category: 'game', rarity: 'common', shape: 'hex', bg: '#3d3a2a', bg2: '#24221a', border: '#e3c98a', ink: '#fbf2d8', icon: 'drone',
+    condition: { kind: 'stat', key: 'modelsBuilt', value: 5, text: 'Собрать 5 моделей дронов' } },
+  { key: 'achiever', name: 'Мастер полигона', motto: 'ДОСТИЖЕНИЯ', category: 'game', rarity: 'common', shape: 'arch', bg: '#2a3a4f', bg2: '#18222f', border: '#f6dc8a', ink: '#fff6d6', icon: 'star',
+    condition: { kind: 'stat', key: 'achPoints', value: 300, text: 'Набрать 300 очков достижений' } },
+  // ── за события
+  { key: 'evNight', name: 'Ночной охотник', motto: 'НОЧНАЯ ОХОТА', category: 'event', rarity: 'common', shape: 'round', bg: '#1d2340', bg2: '#0f1326', border: '#b8bde0', ink: '#eceef9', icon: 'babayaga' },
+  { key: 'evConvoy', name: 'Гроза конвоев', motto: 'КОНВОЙ', category: 'event', rarity: 'common', shape: 'tab', bg: '#3e4a2c', bg2: '#262e1a', border: '#b9c98a', ink: '#eef3dc', icon: 'supplymission' },
+  { key: 'evStorm', name: 'Сквозь бурю', motto: 'БУРЯ', category: 'event', rarity: 'common', shape: 'diamond', bg: '#2c3a4f', bg2: '#182230', border: '#9fc3d6', ink: '#e6f0f5', icon: 'event' },
+  { key: 'evWorkshop', name: 'Мастер недели', motto: 'МАСТЕРСКАЯ', category: 'event', rarity: 'common', shape: 'hex', bg: '#4a3a2a', bg2: '#2d2318', border: '#e3c98a', ink: '#fbf2d8', icon: 'workshop' },
+  { key: 'evRubezh', name: 'Стена рубежа', motto: 'ОБОРОНА РУБЕЖА', category: 'event', rarity: 'common', shape: 'shield', bg: '#4f2a2a', bg2: '#2f1818', border: '#e0a08f', ink: '#fbe4dc', icon: 'reb' },
 
   // ── за рейтинг и сезоны
   { key: 'weeklyTop3', name: 'Тройка недели', motto: 'ТОП-3', category: 'rating', rarity: 'common', shape: 'shield', bg: '#3a3a4f', bg2: '#22222f', border: '#c9cfd6', ink: '#eef1f4', icon: 'star' },

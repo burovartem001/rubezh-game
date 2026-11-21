@@ -13,6 +13,10 @@ import { JobRow } from '../components/Queues';
 import { Icon } from '../art/icons';
 import { Speech, VehicleArt } from '../art/art';
 import { Memorial, SoldierRoster } from './Long';
+import { EquipmentWear, ModelsPanel } from './Deep';
+import { costScale, instructorMulOf, recoveryMulOf, repairMul, vehicleUpgradeMul, workshopMulAt } from '../../../shared/deepcalc';
+import { composeParts } from '../../../shared/progression';
+import { BUILDING_FX } from '../../../shared/content';
 
 type SubTab = 'operators' | 'vehicles' | 'equipment';
 
@@ -54,6 +58,9 @@ function Operators() {
   const wounded = Object.fromEntries(OPERATOR_TYPES.map((t) => [t, state.operators[t].wounded])) as Record<OperatorType, number>;
   const totalWounded = OPERATOR_TYPES.reduce((s, t) => s + wounded[t], 0);
   const medic = state.commander.skills.medic ?? 0;
+  const recMul = recoveryMulOf(composeParts(state.modParts).mods.recovery);
+  const recCost = { supplies: Math.round((recoveryCost(wounded, medic).supplies ?? 0) * recMul) };
+  const instrMul = instructorMulOf(state.soldiers);
   const queueFull = trainJobs.length >= TRAIN_QUEUE_LIMIT;
   return (
     <>
@@ -74,9 +81,9 @@ function Operators() {
             action={
               <div className="row">
                 <span className="small">
-                  <CostLine cost={recoveryCost(wounded, medic)} /> · <Icon name="clock" size={14} /> {fmtLong(recoveryTime(totalWounded, medic))}
+                  <CostLine cost={recCost} /> · <Icon name="clock" size={14} /> {fmtLong(Math.round(recoveryTime(totalWounded, medic) * recMul))}
                 </span>
-                <Button small onClick={() => act('recover')} disabled={!affordable(recoveryCost(wounded, medic))} why="Не хватает припасов">
+                <Button small onClick={() => act('recover')} disabled={!affordable(recCost)} why="Не хватает припасов">
                   <Icon name="cross" size={16} /> Подлатать всех
                 </Button>
               </div>
@@ -95,7 +102,7 @@ function Operators() {
           const owned = o.available + o.on_mission + o.wounded + o.recovering > 0;
           const unlocked = award ? owned : operatorUnlocked(t, tl, state.buildings.hq);
           const inTrain = trainJobs.filter((j) => j.kind === 'train' && j.payload.type === t).reduce((s, j) => s + j.payload.count, 0);
-          const time = trainTime(t, tl);
+          const time = Math.round(trainTime(t, tl) * instrMul);
           const nextRank = o.rank + 1;
           const rankJob = trainJobs.find((j) => j.kind === 'rank' && j.payload.type === t);
           const rankCost = rankUpgradeCost(t, nextRank);
@@ -166,7 +173,7 @@ function Operators() {
                           <Icon name="up" size={15} /> Ранг {nextRank}: +{Math.round(RANK_BONUS * 100)}% к силе и разведке
                         </summary>
                         <div className="small">
-                          <CostLine cost={rankCost} /> · <Icon name="clock" size={14} /> {fmtLong(rankUpgradeTime(nextRank, tl))}
+                          <CostLine cost={rankCost} /> · <Icon name="clock" size={14} /> {fmtLong(Math.round(rankUpgradeTime(nextRank, tl) * instrMul))}
                         </div>
                         <Button small kind="secondary" onClick={() => act('rankUp', { type: t })} disabled={!!rankWhy} why={rankWhy}>
                           Тренировать
@@ -197,7 +204,7 @@ function Operators() {
 }
 
 function Vehicles() {
-  const { state, act, nav } = useGame();
+  const { state, act, nav, now } = useGame();
   const affordable = useAffordable();
   const wsJobs = state.jobs.filter((j) => j.queue === 'workshop');
   const wsFull = wsJobs.length >= WORKSHOP_QUEUE_LIMIT;
@@ -220,10 +227,13 @@ function Vehicles() {
           let body: React.ReactNode;
           if (!v) {
             const locked = state.buildings.hq < d.unlockHq;
+            const needPool = t === 'pickup' && (state.buildings.motorpool ?? 0) < BUILDING_FX.motorpool.pickupLevel;
             body = d.award ? (
               <div className="award-box small"><Icon name="medal" size={16} /> Не строится и не покупается: выдаётся за особые заслуги — {AWARD_SOURCE_NAME}.</div>
             ) : locked ? (
               <div className="warn-box small"><Icon name="lock" size={14} /> Появится, когда командный пункт дорастёт до {d.unlockHq} уровня</div>
+            ) : needPool ? (
+              <div className="warn-box small"><Icon name="lock" size={14} /> Нужен автопарк {BUILDING_FX.motorpool.pickupLevel} уровня — там под пикап освободят бокс</div>
             ) : pending ? (
               <p className="amber small"><Icon name="wrench" size={14} /> Батя уже возится с ним в мастерской…</p>
             ) : (
@@ -235,7 +245,8 @@ function Vehicles() {
               </div>
             );
           } else {
-            const upCost = vehicleUpgradeCost(v.level);
+            const upCost = costScale(vehicleUpgradeCost(v.level), vehicleUpgradeMul(state.buildings.motorpool ?? 0));
+            const repCost = costScale(vehicleRepairCost(v.level), repairMul(state.buildings.repairyard ?? 0, now));
             const needWs = vehicleUpgradeRequiredWorkshop(v.level + 1);
             let upWhy = '';
             if (v.level >= MAX_VEHICLE_LEVEL) upWhy = 'Лучше уже не сделать';
@@ -247,8 +258,8 @@ function Vehicles() {
               <>
                 {v.status === 'damaged' && (
                   <div className="train-row">
-                    <span className="small red"><Icon name="alert" size={14} /> Нужен ремонт: <CostLine cost={vehicleRepairCost(v.level)} /> · {fmtLong(VEHICLE_REPAIR_TIME)}</span>
-                    <Button small onClick={() => act('repairVehicle', { type: t })} disabled={wsFull || !affordable(vehicleRepairCost(v.level))} why={wsFull ? 'Мастерская занята' : 'Не хватает ресурсов'}>
+                    <span className="small red"><Icon name="alert" size={14} /> Нужен ремонт: <CostLine cost={repCost} /> · {fmtLong(VEHICLE_REPAIR_TIME)}</span>
+                    <Button small onClick={() => act('repairVehicle', { type: t })} disabled={wsFull || !affordable(repCost)} why={wsFull ? 'Мастерская занята' : 'Не хватает ресурсов'}>
                       <Icon name="wrench" size={16} /> Починить
                     </Button>
                   </div>
@@ -284,24 +295,13 @@ function Vehicles() {
             </article>
           );
         })}
-        <article className="veh-big locked">
-          <div className="veh-stage">
-            <VehicleArt type="pickup" w={230} />
-          </div>
-          <div className="hero-body">
-            <h3><Icon name="pickup" size={20} /> Пикап</h3>
-            <p className="small">{VEHICLE_LORE.pickup.story}</p>
-            <p className="quote">{VEHICLE_LORE.pickup.quote}</p>
-            <div className="warn-box small"><Icon name="clock" size={14} /> Следующий этап развития игры</div>
-          </div>
-        </article>
       </div>
     </>
   );
 }
 
 function Equipment() {
-  const { state, act } = useGame();
+  const { state, act, now } = useGame();
   const affordable = useAffordable();
   const ws = state.buildings.workshop;
   const [rarity, setRarity] = useState<CraftRarity>('common');
@@ -311,6 +311,7 @@ function Equipment() {
   const wsFull = wsJobs.length >= WORKSHOP_QUEUE_LIMIT;
   return (
     <>
+      <ModelsPanel />
       <div className="section-head">
         <h2><Icon name="supply" size={20} /> Склад · {state.equipment.length}/{EQUIPMENT_LIMIT}</h2>
         <span className="muted small">в поход — до двух разных предметов</span>
@@ -333,6 +334,7 @@ function Equipment() {
               <p className="tiny muted">
                 {e.status === 'mission' ? <><Icon name="map" size={12} /> сейчас в походе</> : <>из: {e.source}</>}
               </p>
+              <EquipmentWear e={e} />
               <div className="row">
                 {e.level < MAX_EQUIPMENT_LEVEL && (
                   <Button small kind="secondary" onClick={() => act('upgradeEquipment', { id: e.id })} disabled={!!why} why={why}>
@@ -390,7 +392,7 @@ function Equipment() {
           ))}
         </div>
         <p className="small">
-          Цена сборки: <CostLine cost={CRAFT[rarity].cost} /> · <Icon name="clock" size={14} /> {fmtLong(CRAFT[rarity].time)}
+          Цена сборки: <CostLine cost={costScale(CRAFT[rarity].cost, workshopMulAt(now))} /> · <Icon name="clock" size={14} /> {fmtLong(CRAFT[rarity].time)}
         </p>
         <div className="eq-grid">
           {EQUIPMENT_TYPES.map((t: EquipmentType) => {
@@ -398,7 +400,7 @@ function Equipment() {
             if (ws < WORKSHOP_RARITY_LEVEL[rarity]) why = `Нужна мастерская ${WORKSHOP_RARITY_LEVEL[rarity]} ур.`;
             else if (full) why = 'Склад забит';
             else if (wsFull) why = 'Мастерская занята';
-            else if (!affordable(CRAFT[rarity].cost)) why = 'Не хватает ресурсов';
+            else if (!affordable(costScale(CRAFT[rarity].cost, workshopMulAt(now)))) why = 'Не хватает ресурсов';
             return (
               <div key={t} className={`eq-card blueprint rarity-${rarity}`}>
                 <div className="eq-top">

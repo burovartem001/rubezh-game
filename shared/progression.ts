@@ -4,6 +4,7 @@
  * Только данные и чистые функции — их используют и сервер, и клиент.
  */
 import type { Cost, OperatorType } from './config.js';
+import { BOND_BONUS, BOND_MAX, FATIGUE_MAX_PENALTY, specByKey } from './content.js';
 
 /* ───────────── Свод бонусов ───────────── */
 
@@ -320,9 +321,9 @@ export const CONTROL_GRACE = 24 * 3_600_000; // сутки контроль де
 export const CONTROL_DECAY_PER_HOUR = 2;
 export const LOOT_PROTECTED_SHARE = 0.4; // доля вместимости, которую нельзя отнять
 /** Атака противника в окне w: есть ли, когда и какой силы. */
-export function attackInWindow(userId: number, w: number, maxDifficulty: number, themeKey: string): { at: number; strength: number } | null {
+export function attackInWindow(userId: number, w: number, maxDifficulty: number, themeKey: string, extraChance = 0): { at: number; strength: number } | null {
   const h = hash(userId * 31337 + w * 7);
-  const chance = themeKey === 'offensive' ? ATTACK_CHANCE + 0.15 : ATTACK_CHANCE;
+  const chance = Math.min(0.95, (themeKey === 'offensive' ? ATTACK_CHANCE + 0.15 : ATTACK_CHANCE) + extraChance);
   if ((h % 1000) / 1000 >= chance) return null;
   const at = w * ATTACK_WINDOW + (hash(h + 3) % ATTACK_WINDOW);
   const rnd = 0.8 + (hash(h + 5) % 400) / 1000;
@@ -376,10 +377,31 @@ export interface SoldierLite {
   type: OperatorType;
   level: number;
   trait: SoldierTrait;
+  spec?: string | null;
+  fatigue?: number; // текущая усталость 0–100
 }
 /** Бонусы группы от именных бойцов: опыт и черты характера. */
-export function soldierMods(list: SoldierLite[]): { mods: Partial<Mods>; text: string[] } {
+export function soldierMods(list: SoldierLite[], bondPairs = 0): { mods: Partial<Mods>; text: string[] } {
   if (!list.length) return { mods: {}, text: [] };
+  const base = soldierModsBase(list);
+  const extra: Record<string, number> = {};
+  const add = (m: Partial<Mods>, k = 1) => { for (const [mk, v] of Object.entries(m)) extra[mk] = (extra[mk] ?? 0) + (v as number) * k; };
+  const specs: string[] = [];
+  for (const s of list) {
+    const sp = specByKey(s.spec);
+    if (sp) { add(sp.mods); specs.push(sp.name.toLowerCase()); }
+  }
+  const avgFat = list.reduce((sum, s) => sum + (s.fatigue ?? 0), 0) / list.length;
+  if (avgFat > 0) add({ power: -(avgFat / 100) * FATIGUE_MAX_PENALTY });
+  const bond = Math.min(BOND_MAX, bondPairs * BOND_BONUS);
+  if (bond) add({ power: bond });
+  for (const [mk, v] of Object.entries(extra)) (base.mods as Record<string, number>)[mk] = ((base.mods as Record<string, number>)[mk] ?? 0) + v;
+  if (specs.length) base.text.push(`специализации: ${[...new Set(specs)].join(', ')}`);
+  if (avgFat >= 10) base.text.push(`усталость ${Math.round(avgFat)}%`);
+  if (bond) base.text.push(`слаженные расчёты ×${bondPairs}`);
+  return base;
+}
+function soldierModsBase(list: SoldierLite[]): { mods: Partial<Mods>; text: string[] } {
   const avgLevel = list.reduce((s, x) => s + x.level, 0) / list.length;
   const count = (t: SoldierTrait) => list.filter((x) => x.trait === t).length;
   const mods: Partial<Mods> = {
@@ -409,12 +431,18 @@ export function composeParts(parts: { label: string; mods: Partial<Mods> }[]) {
   };
 }
 /** Части бонусов конкретного похода (клиентский предпросмотр повторяет серверный расчёт). */
-export function dispatchParts(base: { label: string; mods: Partial<Mods> }[], sectorId: number, now: number, chosen: SoldierLite[]) {
-  const parts = [...base];
+export function dispatchParts(base: { label: string; mods: Partial<Mods> }[], sectorId: number, now: number, chosen: SoldierLite[], bondPairs = 0, extra: { label: string; mods: Partial<Mods> }[] = []) {
+  const parts = [...base, ...extra];
   const ev = mapEventAt(now);
   if (Object.keys(ev.weather.mods).length) parts.push({ label: `Обстановка «${ev.weather.name}»`, mods: ev.weather.mods });
   if (sectorId && sectorId === ev.hotSector) parts.push({ label: 'Горячая цель', mods: HOT_BONUS });
-  const sm = soldierMods(chosen);
+  const sm = soldierMods(chosen, bondPairs);
   if (sm.text.length) parts.push({ label: `Бойцы (${sm.text.join(', ')})`, mods: sm.mods });
   return parts;
+}
+/** Сколько пар бойцов в группе — сработавшиеся расчёты (10+ общих походов). */
+export function countBondPairs(list: { id: number; bonds?: Record<string, number> }[], need = 10): number {
+  let n = 0;
+  for (let i = 0; i < list.length; i++) for (let j = i + 1; j < list.length; j++) if ((list[i].bonds?.[String(list[j].id)] ?? 0) >= need) n++;
+  return n;
 }

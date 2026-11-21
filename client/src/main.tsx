@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { App } from './App';
 import './styles.css';
 import './art.css';
+import './deep.css';
 
 try {
   if (localStorage.getItem('rubezh.reduceMotion') === '1') document.documentElement.classList.add('reduce-motion');

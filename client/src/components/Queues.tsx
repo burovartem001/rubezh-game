@@ -20,6 +20,9 @@ export function jobTitle(j: Job): string {
     case 'vehicle_repair': return `${VEHICLES[p.type as keyof typeof VEHICLES].name}: ремонт`;
     case 'research': return `Исследование: ${RESEARCH.find((r) => r.key === p.key)?.name ?? p.key}`;
     case 'craft': return `${EQUIPMENT[p.type as keyof typeof EQUIPMENT].name} (${RARITY_NAMES[p.rarity as keyof typeof RARITY_NAMES].toLowerCase()})`;
+    case 'drone_model': return `Модель «${p.name}»: сборка`;
+    case 'outpost_build': return `Передовой пункт у «${sectorById(p.sectorId)?.name ?? '?'}»`;
+    case 'outpost_upgrade': return `Передовой пункт → ур. ${p.toLevel}`;
     default: return j.kind;
   }
 }
@@ -31,11 +34,13 @@ export function jobIcon(j: Job): string {
     case 'recover': return 'cross';
     case 'research': return 'data';
     case 'craft': return p.type;
+    case 'drone_model': return 'drone';
+    case 'outpost_build': case 'outpost_upgrade': return 'outpost';
     default: return p.type ?? 'wrench';
   }
 }
-const QUEUE_ICON: Record<Job['queue'], string> = { build: 'hq', train: 'training', workshop: 'workshop', recovery: 'cross', research: 'data' };
-export const QUEUE_NAMES: Record<Job['queue'], string> = { build: 'Строительство', train: 'Подготовка', workshop: 'Мастерская', recovery: 'Восстановление', research: 'Исследования' };
+const QUEUE_ICON: Record<Job['queue'], string> = { build: 'hq', train: 'training', workshop: 'workshop', recovery: 'cross', research: 'data', outpost: 'outpost' };
+export const QUEUE_NAMES: Record<Job['queue'], string> = { build: 'Строительство', train: 'Подготовка', workshop: 'Мастерская', recovery: 'Восстановление', research: 'Исследования', outpost: 'Передовые пункты' };
 
 export function expeditionPhase(x: Expedition, now: number) {
   const f = (now - x.startAt) / (x.endAt - x.startAt);
