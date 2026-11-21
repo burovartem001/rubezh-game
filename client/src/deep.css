@@ -122,3 +122,10 @@
   .ev-tier { padding-right: 96px; }
 }
 .model-card.empty > span { display: flex; flex-direction: column; gap: 2px; }
+.drone-sketch { position: relative; display: inline-block; flex: none; }
+.drone-sketch img, .drone-sketch .tint { position: absolute; inset: 0; width: 100%; height: 100%; }
+.drone-sketch .tint { mix-blend-mode: multiply; opacity: 0.85; -webkit-mask-size: 100% 100%; mask-size: 100% 100%; -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat; }
+.drone-sketch img:nth-child(n+3) { z-index: 1; }
+.drone-sketch { animation: hover 3.2s ease-in-out infinite; }
+.sheet .seg.small { overflow-x: auto; scrollbar-width: none; }
+.sheet .seg.small button { flex: 1 0 auto; min-width: 84px; padding: 0 8px; }

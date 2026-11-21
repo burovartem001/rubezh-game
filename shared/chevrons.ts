@@ -167,6 +167,8 @@ export const CHEVRONS: ChevronDef[] = [
   { key: 'u_kingHearts', name: 'Король червей', motto: '', category: 'site', rarity: 'legendary', series: 'unofficial', image: 'img/patches/kingHearts.webp', shape: 'tab', bg: '', bg2: '', border: '#c0392b', ink: '', icon: '' },
   { key: 'u_madeInRussia', name: 'Made in Russia', motto: '', category: 'site', rarity: 'legendary', series: 'unofficial', image: 'img/patches/madeInRussia.webp', shape: 'tab', bg: '', bg2: '', border: '#a5503f', ink: '', icon: '' },
 ];
+// уставные шевроны нарисованы отдельными картинками-нашивками (img/chevrons/<key>.webp)
+for (const c of CHEVRONS) if (!c.image) c.image = `img/chevrons/${c.key}.webp`;
 
 export const DEFAULT_CHEVRON = 'polygon';
 

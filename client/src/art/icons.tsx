@@ -1,4 +1,5 @@
 import React from 'react';
+import { ICON_SPRITES } from './sprites';
 
 /** Набор оригинальных линейных иконок 24×24 в едином стиле. Цвет — currentColor. */
 const P: Record<string, React.ReactNode> = {
@@ -92,7 +93,34 @@ const P: Record<string, React.ReactNode> = {
 
 export type IconName = keyof typeof P;
 
+/**
+ * Иконка игры. Основной набор — нарисованные иконки из спрайтов img/icons/*.webp (4×4 ячейки),
+ * векторный набор выше остаётся запасным для ключей, которых нет в спрайтах.
+ * С x/y иконка рисуется внутри SVG (карта, шевроны), иначе — как обычный элемент.
+ */
 export function Icon({ name, size = 20, className, title, stroke = 1.7, x, y }: { name: string; size?: number; className?: string; title?: string; stroke?: number; x?: number; y?: number }) {
+  const sp = ICON_SPRITES[name];
+  const a11y = { 'aria-hidden': title ? undefined : true, role: title ? 'img' : undefined, 'aria-label': title } as const;
+  if (sp) {
+    const [sheet, i] = sp;
+    const col = i % 4;
+    const row = Math.floor(i / 4);
+    const url = `img/icons/${sheet}.webp`;
+    if (x != null || y != null)
+      return (
+        <svg className={`ico pic ${className ?? ''}`} x={x} y={y} width={size} height={size} viewBox={`${col * 128} ${row * 128} 128 128`} {...a11y}>
+          <image href={url} width={512} height={512} />
+        </svg>
+      );
+    return (
+      <span
+        className={`ico pic ${className ?? ''}`}
+        style={{ width: size, height: size, backgroundImage: `url(${url})`, backgroundSize: '400% 400%', backgroundPosition: `${(col / 3) * 100}% ${(row / 3) * 100}%` }}
+        title={title}
+        {...a11y}
+      />
+    );
+  }
   const body = P[name] ?? P.sparkle;
   return (
     <svg

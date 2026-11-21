@@ -9,12 +9,12 @@ import type { Mods } from './progression.js';
 
 export type DroneSlot = 'frame' | 'motors' | 'battery' | 'camera' | 'payload' | 'link';
 export const DRONE_SLOTS: { key: DroneSlot; name: string; icon: string }[] = [
-  { key: 'frame', name: 'Рама', icon: 'drone' },
-  { key: 'motors', name: 'Моторы', icon: 'parts' },
-  { key: 'battery', name: 'Аккумулятор', icon: 'fuel' },
-  { key: 'camera', name: 'Камера', icon: 'scout' },
-  { key: 'payload', name: 'Нагрузка', icon: 'raid' },
-  { key: 'link', name: 'Связь', icon: 'radio' },
+  { key: 'frame', name: 'Рама', icon: 'slot-frame' },
+  { key: 'motors', name: 'Моторы', icon: 'slot-motors' },
+  { key: 'battery', name: 'Аккумулятор', icon: 'slot-battery' },
+  { key: 'camera', name: 'Камера', icon: 'slot-camera' },
+  { key: 'payload', name: 'Нагрузка', icon: 'slot-payload' },
+  { key: 'link', name: 'Связь', icon: 'slot-link' },
 ];
 export interface DronePart {
   key: string;
@@ -48,6 +48,10 @@ export const DRONE_PARTS: DronePart[] = [
   { key: 'l_long', slot: 'link', name: 'Дальняя связь', text: 'Сведения точнее, полёт дольше.', mods: { uncertainty: 0.1, time: -0.02 }, cost: { parts: 60 } },
   { key: 'l_mesh', slot: 'link', name: 'Меш-сеть', text: 'Дроны держат связь друг через друга. По чертежу.', mods: { uncertainty: 0.12, losses: 0.04 }, cost: { parts: 140, data: 20 }, blueprint: true },
 ];
+/** Иконки деталей по чертежам. */
+export const PART_ICONS: Record<string, string> = {
+  f_carbon: 'part-carbon', m_silent: 'part-silent', b_cold: 'part-cold', c_thermal: 'part-thermal', c_night: 'part-night', p_cluster: 'part-cluster', l_mesh: 'part-mesh',
+};
 export const BLUEPRINT_PARTS = DRONE_PARTS.filter((p) => p.blueprint).map((p) => p.key);
 export function partByKey(k: string) {
   return DRONE_PARTS.find((p) => p.key === k);
@@ -270,15 +274,15 @@ const TIERS = (chevron: string) => [
   { points: 600, reward: { parts: 800, data: 80 }, chevron },
 ];
 export const EVENTS: GameEvent[] = [
-  { key: 'night', name: 'Ночная охота', text: 'Вся карта в ночи: сила групп +10%, разведка −10%. Очки — за успешные рейды и штурмы.', icon: 'babayaga', mods: { power: 0.1, recon: -0.1 },
+  { key: 'night', name: 'Ночная охота', text: 'Вся карта в ночи: сила групп +10%, разведка −10%. Очки — за успешные рейды и штурмы.', icon: 'event-night', mods: { power: 0.1, recon: -0.1 },
     points: { raid_win: 15, stronghold_win: 40, expedition_win: 60 }, tiers: TIERS('evNight') },
-  { key: 'convoy', name: 'Конвой', text: 'По району идут колонны: задания «Снабжение» дают тройные очки и больше топлива.', icon: 'supplymission', mods: { rewards: 0.15 },
+  { key: 'convoy', name: 'Конвой', text: 'По району идут колонны: задания «Снабжение» дают тройные очки и больше топлива.', icon: 'event-convoy', mods: { rewards: 0.15 },
     points: { supply_win: 30, raid_win: 10, expedition_win: 50 }, tiers: TIERS('evConvoy') },
-  { key: 'storm', name: 'Буря', text: 'Сильные помехи: оснащение слабее на 25%, данные ×2. Очки — за разведку.', icon: 'event', mods: { equip: -0.25, data: 1 },
+  { key: 'storm', name: 'Буря', text: 'Сильные помехи: оснащение слабее на 25%, данные ×2. Очки — за разведку.', icon: 'event-storm', mods: { equip: -0.25, data: 1 },
     points: { recon_win: 20, research: 30, expedition_win: 40 }, tiers: TIERS('evStorm') },
-  { key: 'workshop', name: 'Неделя мастерской', text: 'Сборка, ремонт и модели дешевле. Очки — за работу мастерской.', icon: 'workshop', mods: {},
+  { key: 'workshop', name: 'Неделя мастерской', text: 'Сборка, ремонт и модели дешевле. Очки — за работу мастерской.', icon: 'event-workshop', mods: {},
     points: { craft: 20, repair: 10, model: 60, raid_win: 5 }, tiers: TIERS('evWorkshop') },
-  { key: 'rubezh', name: 'Оборона рубежа', text: 'Противник атакует полигоны чаще. Очки — за отбитые атаки и набеги.', icon: 'reb', mods: { defense: 0.1 }, attackBoost: 0.3,
+  { key: 'rubezh', name: 'Оборона рубежа', text: 'Противник атакует полигоны чаще. Очки — за отбитые атаки и набеги.', icon: 'event-rubezh', mods: { defense: 0.1 }, attackBoost: 0.3,
     points: { defended: 50, raid_win: 10, pvp_win: 40 }, tiers: TIERS('evRubezh') },
 ];
 const DAY = 86_400_000;

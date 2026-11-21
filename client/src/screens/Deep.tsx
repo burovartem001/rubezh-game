@@ -3,7 +3,7 @@ import React, { useState } from 'react';
 import { MISSIONS, OPERATORS, OperatorType, VEHICLES, sectorById } from '../../../shared/config';
 import {
   ACHIEVEMENTS, ACH_POINTS, ACH_TITLES, BLUEPRINT_PARTS, BUILDING_FX, CAMPAIGN, CHAPTERS, CampaignStep, DEFAULT_MODEL, DRONE_PARTS, DRONE_SLOTS, DroneSlot,
-  ENCOUNTERS, EVENTS, MASCOTS, MAX_INSTRUCTORS, MODEL_CLASSES, MODEL_COLORS, OUTPOST, SPECS, SPEC_LEVEL, achTitle, fatigueNow, healScarsCost, modelCost,
+  ENCOUNTERS, EVENTS, MASCOTS, PART_ICONS, MAX_INSTRUCTORS, MODEL_CLASSES, MODEL_COLORS, OUTPOST, SPECS, SPEC_LEVEL, achTitle, fatigueNow, healScarsCost, modelCost,
   modelMods, modelTime, partByKey, wearFactor,
 } from '../../../shared/content';
 import { costScale, equipRepairCostOf, modelRepairCostOf, workshopMulAt } from '../../../shared/deepcalc';
@@ -16,6 +16,7 @@ import { Bar, Button, Countdown, CostLine, RewardLine, Sheet, fmtLong, useAfford
 import { Icon } from '../art/icons';
 import { Speech } from '../art/art';
 import { Chevron } from '../art/Chevron';
+import { DRONE_LAYER_ORDER, DRONE_LAYER_SIZE } from '../art/sprites';
 
 const mod = (n: number, m: number) => ((n % m) + m) % m;
 const TIER_NAMES = ['бронза', 'серебро', 'золото'];
@@ -335,33 +336,29 @@ function AchievementsSheet({ onClose }: { onClose: () => void }) {
 
 /* ═════════════ Конструктор дронов и модели ═════════════ */
 
+const LAYER_KEY: Record<string, string> = {
+  f_light: 'frame_light', f_std: 'frame_universal', f_heavy: 'frame_heavy', f_carbon: 'frame_carbon',
+  m_std: 'motors_standard', m_fast: 'motors_speed', m_torque: 'motors_torque', m_silent: 'motors_silent',
+  b_std: 'battery_standard', b_ext: 'battery_capacity', b_cold: 'battery_cold',
+  c_std: 'camera_standard', c_zoom: 'camera_zoom', c_thermal: 'camera_thermal', c_night: 'camera_night',
+  p_std: 'payload_standard', p_heavy: 'payload_heavy', p_cluster: 'payload_cluster',
+  l_std: 'link_standard', l_long: 'link_long', l_mesh: 'link_mesh',
+};
+/** Модульный дрон из нарисованных слоёв; рама перекрашивается в цвет модели. */
 function DroneSketch({ color, parts, size = 120 }: { color: string; parts: Record<DroneSlot, string>; size?: number }) {
-  const heavy = parts.frame === 'f_heavy';
-  const carbon = parts.frame === 'f_carbon';
-  const arm = heavy ? 34 : 30;
-  const rotor = heavy ? 15 : 13;
+  const url = (slot: DroneSlot) => `img/drone/${LAYER_KEY[parts[slot]] ?? LAYER_KEY[DEFAULT_MODEL[slot]]}.webp`;
+  const frame = url('frame');
   return (
-    <svg className="drone-sketch" width={size} height={size * 0.75} viewBox="0 0 160 120" aria-hidden>
-      <g stroke={carbon ? '#1b1b1b' : '#20261f'} strokeWidth={heavy ? 7 : 5} strokeLinecap="round">
-        <line x1="80" y1="60" x2={80 - arm * 1.4} y2={60 - arm} />
-        <line x1="80" y1="60" x2={80 + arm * 1.4} y2={60 - arm} />
-        <line x1="80" y1="60" x2={80 - arm * 1.4} y2={60 + arm} />
-        <line x1="80" y1="60" x2={80 + arm * 1.4} y2={60 + arm} />
-      </g>
-      {[[-1, -1], [1, -1], [-1, 1], [1, 1]].map(([dx, dy], i) => (
-        <g key={i} className="rotor-g">
-          <circle cx={80 + dx * arm * 1.4} cy={60 + dy * arm} r={rotor} fill="rgba(200,210,190,.18)" stroke="#9aa58c" strokeWidth="1.5" />
-          <circle cx={80 + dx * arm * 1.4} cy={60 + dy * arm} r="3.5" fill={parts.motors === 'm_silent' ? '#3f5d6b' : parts.motors === 'm_fast' ? '#c9a23a' : '#555'} />
-        </g>
+    <span className="drone-sketch" style={{ width: size, height: (size * DRONE_LAYER_SIZE.h) / DRONE_LAYER_SIZE.w }} aria-hidden>
+      {DRONE_LAYER_ORDER.map((slot) => (
+        <React.Fragment key={slot}>
+          <img src={url(slot)} alt="" draggable={false} />
+          {slot === 'frame' && parts.frame !== 'f_carbon' && (
+            <i className="tint" style={{ background: color, WebkitMaskImage: `url(${frame})`, maskImage: `url(${frame})` }} />
+          )}
+        </React.Fragment>
       ))}
-      <rect x="62" y="46" width="36" height="28" rx="7" fill={color} stroke="#151915" strokeWidth="2.5" />
-      {parts.battery !== 'b_std' && <rect x="70" y="50" width="20" height="6" rx="2" fill={parts.battery === 'b_cold' ? '#8fb3c9' : '#a0a86e'} />}
-      <circle cx="80" cy="44" r={parts.camera === 'c_zoom' ? 6 : 5} fill={parts.camera === 'c_thermal' ? '#c0532e' : parts.camera === 'c_night' ? '#6ccf6c' : '#222'} stroke="#ddd" strokeWidth="1" />
-      {parts.payload !== 'p_std' && <rect x={parts.payload === 'p_cluster' ? 66 : 72} y="76" width={parts.payload === 'p_cluster' ? 28 : 16} height="9" rx="3" fill="#4a3d2c" stroke="#151915" />}
-      {parts.payload === 'p_std' && <rect x="75" y="76" width="10" height="7" rx="2" fill="#4a3d2c" />}
-      <line x1="94" y1="48" x2={parts.link === 'l_long' ? 110 : 102} y2={parts.link === 'l_long' ? 28 : 36} stroke="#bbb" strokeWidth="2" />
-      {parts.link === 'l_mesh' && <circle cx="102" cy="36" r="4" fill="none" stroke="#6ccf6c" strokeWidth="1.5" />}
-    </svg>
+    </span>
   );
 }
 
@@ -437,7 +434,7 @@ export function ConstructorSheet({ onClose, initial }: { onClose: () => void; in
                       onClick={() => setParts((x) => ({ ...x, [sl.key]: p.key }))}
                       title={locked ? 'Нужен чертёж' : p.text}
                     >
-                      <b>{locked && <Icon name="lock" size={12} />} {p.name}</b>
+                      <b>{locked ? <Icon name="lock" size={14} /> : PART_ICONS[p.key] ? <Icon name={PART_ICONS[p.key]} size={18} /> : null} {p.name}</b>
                       <small>{modsText(p.mods)}</small>
                       <small className="muted"><CostLine cost={p.cost} check={false} /></small>
                     </button>
@@ -567,7 +564,7 @@ function BlueprintsBox() {
           const have = state.blueprints.includes(k);
           return (
             <span key={k} className={`bp ${have ? 'on' : ''}`}>
-              <Icon name={have ? 'blueprint' : 'lock'} size={14} /> {have ? p.name : '???'}
+              <Icon name={have ? PART_ICONS[k] ?? 'blueprint' : 'lock'} size={18} /> {have ? p.name : '???'}
               {have && <small className="muted"> · {modsText(p.mods)}</small>}
             </span>
           );
@@ -712,10 +709,10 @@ export function SoldierDeep({ s }: { s: Soldier }) {
   const instructors = state.soldiers.filter((x) => x.instructor && x.status !== 'lost').length;
   return (
     <span className="sol-deep">
-      {fat > 0 && <span className={`tag ${fat >= 60 ? 'r-bad' : ''}`}><Icon name="clock" size={11} /> усталость {fat}%</span>}
+      {fat > 0 && <span className={`tag ${fat >= 60 ? 'r-bad' : ''}`}><Icon name="fatigue" size={14} /> усталость {fat}%</span>}
       {spec && <span className="tag gold"><Icon name="star" size={11} /> {spec.name}: {spec.text.toLowerCase()}</span>}
-      {s.instructor && <span className="tag"><Icon name="training" size={11} /> инструктор</span>}
-      {mates.length > 0 && <span className="tag"><Icon name="squad" size={11} /> расчёт с {mates.map((m) => `«${m!.name}»`).join(', ')}</span>}
+      {s.instructor && <span className="tag"><Icon name="instructor" size={14} /> инструктор</span>}
+      {mates.length > 0 && <span className="tag"><Icon name="bond" size={14} /> расчёт с {mates.map((m) => `«${m!.name}»`).join(', ')}</span>}
       {s.status !== 'lost' && (
         <span className="sol-actions">
           {!s.spec && s.level >= SPEC_LEVEL && options.map((o) => (
@@ -748,7 +745,7 @@ export function MascotsRow() {
     <div className="mascots">
       {state.mascots.map((k) => (
         <span key={k} className="mascot">
-          <Icon name="paw" size={18} /> <b>{MASCOTS[k]?.name}</b> <small className="muted">{MASCOTS[k]?.text}</small>
+          <Icon name={k === 'cat' || k === 'dog' ? k : 'paw'} size={26} /> <b>{MASCOTS[k]?.name}</b> <small className="muted">{MASCOTS[k]?.text}</small>
         </span>
       ))}
     </div>
