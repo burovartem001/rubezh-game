@@ -1,5 +1,5 @@
-import React, { useId } from 'react';
-import { CHEVRON_RARITY_COLORS, ChevronDef, ChevronShape, chevronByKey } from '../../../shared/chevrons';
+import React, { useEffect, useId, useState } from 'react';
+import { CHEVRON_CATEGORIES, CHEVRON_RARITY_COLORS, CHEVRON_RARITY_NAMES, ChevronDef, ChevronShape, chevronByKey } from '../../../shared/chevrons';
 import { Icon } from './icons';
 
 /** Контуры нашивок в поле 100×120. */
@@ -17,13 +17,29 @@ const BAND_Y: Record<ChevronShape, number> = { shield: 76, round: 78, hex: 78, t
 const inner = (k: number) => `translate(50 60) scale(${k}) translate(-50 -60)`;
 
 /** Нарисованный шеврон. dim — ещё не получен (силуэт). */
-export function Chevron({ def, size = 72, dim, className }: { def: ChevronDef | string | undefined; size?: number; dim?: boolean; className?: string }) {
+/** Открыть нашивку на весь экран (окно ChevronViewer, оно встроено в каркас игры). */
+export function zoomChevron(key: string, locked = false) {
+  window.dispatchEvent(new CustomEvent('chevron:zoom', { detail: { key, locked } }));
+}
+
+export function Chevron({ def, size = 72, dim, className, zoom = true }: { def: ChevronDef | string | undefined; size?: number; dim?: boolean; className?: string; zoom?: boolean }) {
   const d = typeof def === 'string' ? chevronByKey(def) : def;
   const uid = useId().replace(/[:]/g, '');
   if (!d) return null;
   if (d.image) {
+    const open = (e: React.SyntheticEvent) => {
+      e.stopPropagation();
+      e.preventDefault();
+      zoomChevron(d.key, !!dim);
+    };
     return (
-      <span className={`chevron patch r-${d.rarity} ${dim ? 'dim' : ''} ${className ?? ''}`} style={{ width: size, height: size * 1.2 }}>
+      <span
+        className={`chevron patch r-${d.rarity} ${dim ? 'dim' : ''} ${zoom ? 'zoomable' : ''} ${className ?? ''}`}
+        style={{ width: size, height: size * 1.2 }}
+        {...(zoom
+          ? { role: 'button', tabIndex: 0, title: 'Открыть на весь экран', onClick: open, onKeyDown: (e: React.KeyboardEvent) => (e.key === 'Enter' || e.key === ' ') && open(e) }
+          : {})}
+      >
         <img src={d.image} alt={`Нашивка «${d.name}»`} loading="lazy" draggable={false} />
       </span>
     );
@@ -81,5 +97,43 @@ export function Chevron({ def, size = 72, dim, className }: { def: ChevronDef | 
       {/* звёздочки-заклёпки */}
       <circle cx="50" cy={d.shape === 'round' ? 22 : 13} r="2" fill={d.border} />
     </svg>
+  );
+}
+
+/** Нашивка на весь экран: крупная картинка, название, редкость и как получить. Закрывается касанием или Esc. */
+export function ChevronViewer() {
+  const [cur, setCur] = useState<{ key: string; locked: boolean } | null>(null);
+  useEffect(() => {
+    const on = (e: Event) => setCur((e as CustomEvent).detail);
+    window.addEventListener('chevron:zoom', on);
+    return () => window.removeEventListener('chevron:zoom', on);
+  }, []);
+  useEffect(() => {
+    if (!cur) return;
+    const k = (e: KeyboardEvent) => e.key === 'Escape' && setCur(null);
+    window.addEventListener('keydown', k);
+    document.body.classList.add('noscroll');
+    return () => {
+      window.removeEventListener('keydown', k);
+      document.body.classList.remove('noscroll');
+    };
+  }, [cur]);
+  const d = cur ? chevronByKey(cur.key) : undefined;
+  if (!cur || !d?.image) return null;
+  const color = CHEVRON_RARITY_COLORS[d.rarity];
+  const how = d.condition?.text ?? (d.category === 'site' ? 'Выдаёт сайт «Учёт дронов» за особые заслуги' : CHEVRON_CATEGORIES.find((c) => c.key === d.category)?.text);
+  return (
+    <div className="chev-viewer" role="dialog" aria-modal="true" aria-label={`Нашивка «${d.name}»`} onClick={() => setCur(null)}>
+      <button className="chev-viewer-close" aria-label="Закрыть" onClick={() => setCur(null)}>
+        <Icon name="close" size={26} />
+      </button>
+      <img className={`r-${d.rarity}`} src={d.image} alt={`Нашивка «${d.name}»`} draggable={false} />
+      <div className="chev-viewer-info">
+        <b>{d.name}</b>
+        <span className="rarity-tag" style={{ color, borderColor: color }}>{CHEVRON_RARITY_NAMES[d.rarity]}</span>
+        {how && <small>{how}</small>}
+        {cur.locked && <small className="locked">Ещё не получена</small>}
+      </div>
+    </div>
   );
 }

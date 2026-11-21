@@ -144,7 +144,7 @@ export function Burst({ onDone, title, text, icon = 'star', chevron }: { onDone:
           <i key={i} className="spark" style={{ ['--a' as string]: `${(i / 14) * 360}deg`, ['--d' as string]: `${(i % 3) * 0.08}s` }} />
         ))}
         {chevron ? (
-          <div className="burst-chevron"><Chevron def={chevron} size={96} /></div>
+          <div className="burst-chevron"><Chevron def={chevron} size={96} zoom={false} /></div>
         ) : (
           <div className="burst-icon">
             <Icon name={icon} size={44} stroke={1.6} />

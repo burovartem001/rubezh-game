@@ -14,6 +14,7 @@ import { resShort } from './ui';
 import { Icon } from './art/icons';
 import { Burst, Drone, Speech } from './art/art';
 import { chevronByKey } from '../../shared/chevrons';
+import { ChevronViewer } from './art/Chevron';
 
 export function App() {
   const [state, setState] = useState<GameState | null>(null);
@@ -164,6 +165,7 @@ function Shell() {
       </nav>
       {queues && <QueuesSheet onClose={() => setQueues(false)} />}
       {burst && <Burst {...burst} onDone={() => setBurst(null)} />}
+      <ChevronViewer />
     </div>
   );
 }
